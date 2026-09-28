@@ -1,184 +1,118 @@
-Hi,
+# SPEC.md: Fakhri Glass requirements
 
-I want to create and android application for a glass vendor. 
+## 1. Business
 
-The requiremnet is clear. The vendor want to track his invontory. With below fix major categories.
+A small glass vendor with two stores (Mumbai and Sanpada) and one glass cutter.
+The app tracks inventory, takes customer orders, and helps the cutter cut ordered
+pieces efficiently from available stock (offcuts first).
 
-1. Clear Galss
-2. Mirror Glass
-3. Tinted Glass
-4. Reflective Glass
-5. Figure Class
-6. Backpainted Glass 
-7. Frosted Glass
-8. Extra Clear Glass
+## 2. Users and access
 
-Now these are further classified into below subcategories.
+- 3 personal accounts (Supabase email/password), sign-ups disabled, no sign-up screen.
+- `profiles.assignment` is `mumbai`, `sanpada` or `cutter`. It is a LABEL, not a
+  permission: everyone can see and do everything.
+- Current accounts:
 
-1. Figure Glass (Lining)
-5mm Clear Moru
-5mm Clear (reverse Moru)
-5mm Clear Flute Lite
-5mm Grey Moru
-5mm Brown Moru
-8mm Clear Moru
-2. Backpainted Glass
-4mm White B/P
-6mm White B/P
-3. Frosted Glass
-4mm Frosted
-5mm Frosted
-4. Clear Glass
-4mm
-5mm
-6mm
-8mm
-10mm
-12mm
-5. Mirror Glass
-4mm Clear Mirror
-5mm Clear Mirror
-6mm Clear Mirror
-4mm Extra Clear Mirror
-5mm Extra Clear Mirror
-6mm Extra Clear Mirror
-5mm Grey Mirror
-5mm Brown Mirror
-5mm Rose Gold Mirror
-6. Extra Clear Glass
-4mm
-5mm
-6mm
-8mm
-10mm
-12mm
-7. Tinted Glass
-4mm Grey Tinted
-5mm Grey Tinted
-4mm Brown Tinted
-5mm Brown Tinted
-8mm Brown Tinted
-8mm Grey Tinted
-10mm Brown
-10mm Grey
-12mm Brown
-12mm Grey
-8. Reflective Glass
+| Name | Assignment |
+|---|---|
+| Murtuza | mumbai |
+| Qutub | sanpada |
+| Hussain | cutter |
 
-Grey Reflective
+- Assignment is used only to:
+  - preselect the store on new orders (Mumbai/Sanpada users; always changeable),
+  - open the cutter on the Cut tab and everyone else on Orders,
+  - default the order list filter to the user's own store (cutter defaults to All),
+  - show "Name · Mumbai" in the activity log.
+- `cutter` is not a store. It never appears in the order Store dropdown or on labels.
 
-3.5mm Grey Reflective
-4mm Grey Reflective
-5mm Grey Reflective
+## 3. Product catalogue (already seeded: 8 categories, 50 products, editable later)
 
-Brown Reflective
+| Category | Products |
+|---|---|
+| Clear Glass (6) | 4, 5, 6, 8, 10, 12 mm |
+| Extra Clear Glass (6) | 4, 5, 6, 8, 10, 12 mm |
+| Mirror Glass (9) | 4/5/6 mm Clear; 4/5/6 mm Extra Clear; 5 mm Grey; 5 mm Brown; 5 mm Rose Gold |
+| Tinted Glass (10) | Grey 4/5/8/10/12; Brown 4/5/8/10/12 mm |
+| Reflective Glass (9) | Grey, Brown, Clear, each 3.5, 4, 5 mm |
+| Figure Glass (6, lining) | 5 mm Clear Moru; 5 mm Clear (Reverse Moru); 5 mm Clear Flute Lite; 5 mm Grey Moru; 5 mm Brown Moru; 8 mm Clear Moru |
+| Backpainted Glass (2) | 4 mm White B/P, 6 mm White B/P |
+| Frosted Glass (2) | 4 mm, 5 mm |
 
-3.5mm Brown Reflective
-4mm Brown Reflective
-5mm Brown Reflective
+**Lining rule.** Products with `is_lining = true` (Figure Glass): when adding a full sheet,
+the user must enter the "vertical line height" in a fixed input box, with a visible note
+that it is critical for the glass optimiser. The database rejects a lining full sheet
+without it. Lining pieces are cut vertically only and are never rotated.
 
-Clear Reflective
+## 4. Features
 
-3.5mm Clear Reflective
-4mm Clear Reflective
-5mm Clear Reflective
+### 4.1 Inventory
+- Add and edit stock with dimensions. Each physical sheet or offcut is ONE `stock_items` row;
+  adding quantity N inserts N rows.
+- Filter by category, product, size.
+- Soft delete only (`status = 'removed'`), always with a confirmation dialog.
 
-Note: please add a note for lining glass to put verticle line height in fixed input box. this will be very criticle in glass optimiser.
+### 4.2 Orders
+- Customer name, phone, address; multiple items (product, width, height, quantity,
+  price per item); several pieces of the same product with different sizes; several
+  products per order; total; payment method; notes.
+- REQUIRED "Store" dropdown with exactly two values: Mumbai and Sanpada (stored as
+  `mumbai` / `sanpada`). Needed because each piece label prints the store.
+- Order status: `new`, `cutting`, `cut`, `delivered`.
+- Payment methods allowed by the database: cash, upi, card, bank_transfer, credit, other.
 
-Now I want to create a mobile such that vendor can manage his inventory with ease. and while adding new inventory item the vendor should be able to enter the dimensions of the item in inventory.
+### 4.3 Piece labels
+- One label per physical piece (quantity 3 gives 3 labels: 1/3, 2/3, 3/3).
+- Shows store, order number, customer, product, size, piece number.
+- Printed via PDF. Printer and label size decided later (see open questions).
 
-Then second part will come for creating order page where vendor can enter order details like customer name, contact number, address, items ordered, quantity, price, total price, payment method, etc. 
+### 4.4 Cutting optimiser (cutter's screen)
+- For each product in an order, show a visual layout of how to cut the ordered pieces
+  from available stock: offcuts first, smallest sufficient first, then a new full sheet
+  only when needed.
+- Guillotine cutting only (glass is scored edge to edge).
+- Leftovers are saved as offcuts (new stock rows with a parent link) unless smaller than
+  the minimum usable size.
+- Lining glass: vertical cuts only, no rotation.
+- Interactive: drag pieces (snap to edges, live collision check), rotate (not lining),
+  move a piece to another sheet, add a new sheet.
+- Settings: kerf (blade loss), minimum usable offcut size, maximum wastage %.
+- On confirm: ONE atomic database transaction (`confirm_cut_plan`) deducts the used
+  sheets, creates offcuts, saves the plan and pieces, and updates the order status.
+- Example: one 7 ft x 10 ft sheet in stock, order of 3 pieces of 300 x 400 mm. The
+  optimiser proposes a layout and saves the remainder as offcuts.
 
-The order items will be choosed from the above subcategoris with specific dimentions.
-Eg. vendor will select a subcategory then enter the dimention in which he want a piece of glass.
-there can be multiple pieces of same subcategory with different dimensions. So user can add multiple items in the order. 
-and also more than 1 subcategory can be added in the order.
+### 4.5 Low-stock notification
+- Home screen banner, per-product minimum sheet count (`products.min_stock_sheets`).
+- Counts available FULL sheets only; offcuts do not count. Read from the `low_stock` view.
+- All minimums are currently 0, so nothing is flagged until the user sets them.
 
-The app should be user friendly and easy to navigate. 
+### 4.6 Activity log (read-only)
+- Who did what and when, for all actions, shown as "Name · Assignment".
+- Filled by database triggers and the `log_event` RPC; the app can only read it.
 
-Now next step will be the order will go to the glass cutter application. Where he will see the order.
-now to cut the glass the cutter require a glass optimiser. something like a visualiser how to cut the glass from the available inventory. 
+## 5. Build phases (one Antigravity conversation each, Planning mode on)
 
-Eg. suppose i have a piece of glass of 7 feet by 10 feet in inventory for a subcategory. and there is 1 order with same subcategory with 3 pieces. each piece of 300mm by 400mm.
-Now in this scenat=rio the optimiser should be smart enough to track the best possible way to cut the glass from the available inventory. it should also check if the remaining glass from main piece will be used again or PushNotificationIOS. Based on the main category i can share more details and requirements.
+1. Auth and app shell: login, session, tabs (Home, Inventory, Orders, Cut, Settings), `log_event`.
+2. Inventory: list, filters, add stock with lining validation and note, edit/remove.
+3. Orders: customer, items loop, store dropdown, pricing, payment, list/detail.
+4. Optimiser core: pure TypeScript, tests first.
+5. Optimiser UI: Skia canvas, drag, snap, new sheet, kerf, wastage.
+6. Confirm flow: `confirm_cut_plan` integration, cutter queue, and database hardening (see ARCHITECTURE.md, backlog).
+7. Low-stock banner and notification, backup export. 7b: Activity log screen.
+8. Piece labels (PDF).
 
-for creating the optimiser there are some points to be considered.
-1. The remaining glass should be tracked for future use.
-2. The lining category glass sghould always be in verticle cut
-3. The optimiser should be interactive to modify the position. 
-4. If vendor want to move any peice on optimiser it should be doable. 
-5. if vendor wants to cut the piece from new sheet that provision should also be there.
-6. After confirm the optimiser the pieces should be marked as used or deducted from inventory.
-7. also keep provsion to add max wastage consideration to make ptimiser/ visuaklizer more efficient.
+## 6. Not now
 
-Also there should be notification message on main screen for low inventory stock.
+3-year data cleanup, offline queue, roles/permissions, iOS, web.
 
-Give option to add dimentions in any unit mm, cm, inch, feets. And save all data in mm format in DB. Main thing to remember is all the values after decible should be in fractiion of 1/16. use below function to calculate
+## 7. Open questions (agents must ask, not guess)
 
-function convertToFractionalMM(value, fromUnit, precision = 16) {
-    // 1. Convert input unit to decimal millimeters
-    let mmDecimal = 0;
-    switch(fromUnit.toLowerCase()) {
-        case 'foot':
-        case 'feet':
-        case 'ft':
-            mmDecimal = value * 304.8; // 1 foot = 304.8 mm
-            break;
-        case 'inch':
-        case 'inches':
-        case 'in':
-            mmDecimal = value * 25.4;
-            break;
-        case 'cm':
-            mmDecimal = value * 10;
-            break;
-        case 'm':
-            mmDecimal = value * 1000;
-            break;
-        case 'mm':
-            mmDecimal = value;
-            break;
-        default:
-            throw new Error("Unsupported unit. Use 'feet', 'inch', 'cm', 'm', or 'mm'.");
-    }
+Ask the user one at a time when the relevant phase starts.
 
-    // 2. Extract the whole millimeter value
-    const wholeMM = Math.floor(mmDecimal);
-    
-    // 3. Extract the decimal remainder
-    const remainder = mmDecimal - wholeMM;
-    
-    // 4. Calculate the closest numerator based on precision (e.g., 8 for 1/8ths)
-    const numerator = Math.round(remainder * precision);
-    
-    // 5. Handle rounding up edge-case (e.g., 8/8 becomes +1 whole mm)
-    let finalWhole = wholeMM;
-    let finalNumerator = numerator;
-    
-    if (finalNumerator === precision) {
-        finalWhole += 1;
-        finalNumerator = 0;
-    }
-    
-    // 6. Simplify the fraction if needed (Greatest Common Divisor)
-    if (finalNumerator > 0) {
-        const gcd = (a, b) => b ? gcd(b, a % b) : a;
-        const divisor = gcd(finalNumerator, precision);
-        finalNumerator /= divisor;
-        const finalDenominator = precision / divisor;
-        
-        return `${finalWhole} ${finalNumerator}/${finalDenominator} mm`;
-    }
-    
-    return `${finalWhole} mm`;
-}
-
-// --- Test Cases ---
-// 0.098835 feet -> 30 1/8 mm (with precision set to 16)
-console.log(convertToFractionalMM(0.098835, 'feet', 16)); // Output: "30 1/8 mm"
-
-// 2.5 feet -> 762 mm
-console.log(convertToFractionalMM(2.5, 'ft', 16));    
-
-
-Now give me plan for this how should i proceed what techniology should be used and how it can be optimised to make the app faster and easy to use. give me a implmentation plan so that i can get this done in antigravity IDE.
+- What "vertical line height" physically means for figure glass (needed before phase 2 UI copy and phase 4).
+- Standard stock sheet sizes.
+- Kerf and edge trim values.
+- Pricing: per sq ft or per piece? GST invoicing needed? (`products.rate_per_sqft` exists but is empty.)
+- May pieces from different orders share a sheet? (`confirm_cut_plan` currently handles one order and one product per call.)
+- Label printer type and label size; barcode/QR needed or not.
