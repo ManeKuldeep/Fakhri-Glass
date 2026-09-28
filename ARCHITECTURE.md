@@ -1,0 +1,9 @@
+- Stack: Expo (dev build), TypeScript strict, Expo Router, Zustand, TanStack Query, supabase-js, Skia, Gesture Handler, Reanimated.
+- All dimensions are integer millimetres. Convert units only in UI formatting helpers.
+- No business logic in components. Optimiser lives in src/optimizer with ZERO React/RN imports.
+- Every optimiser change requires Jest + fast-check tests passing.
+- DB changes only via supabase/migrations/*.sql. Never edit the remote DB by hand.
+- Stock deduction happens only inside the confirm_cut_plan Postgres function (one transaction).
+- Every table has shop_id and RLS. Never use the service_role key in app code.
+- Lining glass: is_lining products require vertical_line_height_mm; never rotate them.
+- Work one phase at a time. After each phase: run tsc, lint, tests, and list what changed.
