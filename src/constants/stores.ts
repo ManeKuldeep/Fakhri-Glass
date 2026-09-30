@@ -1,5 +1,5 @@
 export const STORES = [
-  { value: 'turbhe', label: 'Turbhe' },
+  { value: 'mumbai', label: 'Mumbai' },
   { value: 'sanpada', label: 'Sanpada' },
 ] as const;
 

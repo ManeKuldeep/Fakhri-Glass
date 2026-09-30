@@ -363,6 +363,7 @@ export type Database = {
           payment_method: string | null
           shop_id: string
           status: string
+          store: string
           total: number
         }
         Insert: {
@@ -376,6 +377,7 @@ export type Database = {
           payment_method?: string | null
           shop_id?: string
           status?: string
+          store: string
           total?: number
         }
         Update: {
@@ -389,6 +391,7 @@ export type Database = {
           payment_method?: string | null
           shop_id?: string
           status?: string
+          store?: string
           total?: number
         }
         Relationships: [
@@ -464,20 +467,20 @@ export type Database = {
       }
       profiles: {
         Row: {
-          assignment: string | null
-          full_name: string | null
+          assignment: string
+          full_name: string
           id: string
           shop_id: string
         }
         Insert: {
-          assignment?: string | null
-          full_name?: string | null
+          assignment: string
+          full_name: string
           id: string
           shop_id: string
         }
         Update: {
-          assignment?: string | null
-          full_name?: string | null
+          assignment?: string
+          full_name?: string
           id?: string
           shop_id?: string
         }
