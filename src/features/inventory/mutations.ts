@@ -86,11 +86,14 @@ export function useRemoveStock() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (ids: string | string[]) => {
+      const idList = Array.isArray(ids) ? ids : [ids];
+      if (idList.length === 0) return;
+
       const { error } = await supabase
         .from('stock_items')
         .update({ status: 'removed' })
-        .eq('id', id);
+        .in('id', idList);
 
       if (error) {
         throw new Error(friendlyStockError(error.message));

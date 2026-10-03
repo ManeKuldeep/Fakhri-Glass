@@ -8,6 +8,8 @@ export const orderKeys = {
   list: (filters: OrderListFilters) =>
     [...orderKeys.all, 'list', filters] as const,
   detail: (id: string) => [...orderKeys.all, 'detail', id] as const,
+  customerSearch: (name: string) =>
+    [...orderKeys.all, 'customerSearch', name] as const,
   customerByPhone: (phone: string) =>
     [...orderKeys.all, 'customerByPhone', phone] as const,
 };
@@ -108,6 +110,14 @@ async function fetchCustomerByPhone(phone: string) {
     .maybeSingle();
 }
 
+async function fetchCustomersByName(name: string) {
+  return supabase
+    .from('customers')
+    .select('id, name, phone, address')
+    .ilike('name', `%${name.trim()}%`)
+    .limit(5);
+}
+
 // ─── Hooks ───────────────────────────────────────────────────────────────────
 
 export function useOrders(filters: OrderListFilters) {
@@ -130,6 +140,20 @@ export function useOrderDetail(id: string) {
       return data;
     },
     enabled: !!id,
+  });
+}
+
+export function useCustomerSearch(name: string) {
+  const query = name.trim();
+  return useQuery({
+    queryKey: orderKeys.customerSearch(query),
+    queryFn: async () => {
+      const { data, error } = await fetchCustomersByName(query);
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    enabled: query.length >= 2,
+    staleTime: 30_000,
   });
 }
 

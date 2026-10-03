@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -27,6 +28,7 @@ export default function OrdersScreen() {
 
   const [storeFilter, setStoreFilter] = useState<string | undefined>(defaultStore);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [searchQuery, setSearchQuery] = useState('');
 
   const filters: OrderListFilters = {
     store: storeFilter,
@@ -34,6 +36,15 @@ export default function OrdersScreen() {
   };
 
   const { data: orders, isLoading, error, refetch } = useOrders(filters);
+
+  const filteredOrders = orders?.filter((order) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.trim().toLowerCase();
+    const customerMatch = order.customer.name.toLowerCase().includes(query);
+    const orderNoMatch = String(order.order_no).includes(query);
+    const phoneMatch = order.customer.phone ? order.customer.phone.includes(query) : false;
+    return customerMatch || orderNoMatch || phoneMatch;
+  });
 
   // Modals
   const [createVisible, setCreateVisible] = useState(false);
@@ -54,6 +65,23 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Search Bar */}
+      <View style={styles.searchBar}>
+        <MaterialCommunityIcons name="magnify" size={20} color="#94A3B8" />
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search customer name or order #..."
+          placeholderTextColor="#94A3B8"
+        />
+        {searchQuery ? (
+          <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+            <MaterialCommunityIcons name="close-circle" size={18} color="#94A3B8" />
+          </Pressable>
+        ) : null}
+      </View>
+
       {/* Filters */}
       <OrderFilterBar
         selectedStore={storeFilter}
@@ -65,7 +93,11 @@ export default function OrdersScreen() {
       {/* Count */}
       <View style={styles.toolbar}>
         <Text style={styles.countText}>
-          {orders ? `${orders.length} order${orders.length !== 1 ? 's' : ''}` : ''}
+          {filteredOrders
+            ? `${filteredOrders.length} order${filteredOrders.length !== 1 ? 's' : ''}${
+                searchQuery ? ` matching "${searchQuery}"` : ''
+              }`
+            : ''}
         </Text>
       </View>
 
@@ -95,7 +127,7 @@ export default function OrdersScreen() {
         </View>
       ) : (
         <FlatList
-          data={orders}
+          data={filteredOrders}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
@@ -127,6 +159,26 @@ export default function OrdersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    paddingVertical: 0,
+  },
   toolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',

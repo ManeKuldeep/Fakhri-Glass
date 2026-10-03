@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import FilterBar from '../../src/features/inventory/components/FilterBar';
-import StockItemCard from '../../src/features/inventory/components/StockItemCard';
+import ProductStockCard from '../../src/features/inventory/components/ProductStockCard';
+import type { ProductStockGroup } from '../../src/features/inventory/components/ProductStockCard';
 import AddStockForm from '../../src/features/inventory/components/AddStockForm';
 import EditStockForm from '../../src/features/inventory/components/EditStockForm';
 import { useStockItems } from '../../src/features/inventory/queries';
@@ -31,6 +32,45 @@ export default function InventoryScreen() {
 
   const { data: stockItems, isLoading, error, refetch } = useStockItems(filters);
 
+  // ─── Group stock by product / subcategory ──────────────────────────────────
+  const groupedStock = useMemo(() => {
+    if (!stockItems) return [];
+    const groupMap = new Map<string, ProductStockGroup>();
+
+    for (const item of stockItems) {
+      const pid = item.product.id;
+      const existing = groupMap.get(pid);
+      if (existing) {
+        existing.totalSheets += 1;
+        existing.items.push(item);
+      } else {
+        groupMap.set(pid, {
+          productId: pid,
+          product: item.product,
+          totalSheets: 1,
+          items: [item],
+        });
+      }
+    }
+
+    return Array.from(groupMap.values());
+  }, [stockItems]);
+
+  // ─── Accordion expansion state ─────────────────────────────────────────────
+  const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(new Set());
+
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   // ─── Modals ────────────────────────────────────────────────────────────────
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<EditItem | null>(null);
@@ -47,11 +87,17 @@ export default function InventoryScreen() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  const renderItem = useCallback(
-    ({ item }: { item: EditItem }) => (
-      <StockItemCard item={item} showFtIn={showFtIn} onEdit={handleEdit} />
+  const renderGroupItem = useCallback(
+    ({ item }: { item: ProductStockGroup }) => (
+      <ProductStockCard
+        group={item}
+        isExpanded={expandedProductIds.has(item.productId)}
+        onToggleExpand={() => handleToggleExpand(item.productId)}
+        showFtIn={showFtIn}
+        onEdit={handleEdit}
+      />
     ),
-    [showFtIn, handleEdit],
+    [expandedProductIds, handleToggleExpand, showFtIn, handleEdit],
   );
 
   return (
@@ -66,10 +112,16 @@ export default function InventoryScreen() {
         onSourceChange={setSource}
       />
 
-      {/* Unit toggle */}
+      {/* Unit toggle & counts */}
       <View style={styles.toolbar}>
         <Text style={styles.countText}>
-          {stockItems ? `${stockItems.length} item${stockItems.length !== 1 ? 's' : ''}` : ''}
+          {stockItems
+            ? `${groupedStock.length} ${
+                groupedStock.length === 1 ? 'product' : 'products'
+              } · ${stockItems.length} ${
+                stockItems.length === 1 ? 'sheet' : 'sheets'
+              }`
+            : ''}
         </Text>
         <Pressable
           style={styles.unitToggle}
@@ -114,9 +166,9 @@ export default function InventoryScreen() {
         </View>
       ) : (
         <FlatList
-          data={stockItems}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
+          data={groupedStock}
+          keyExtractor={(item) => item.productId}
+          renderItem={renderGroupItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />

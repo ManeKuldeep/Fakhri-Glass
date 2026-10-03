@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCategories, useProducts } from '../../inventory/queries';
-import { useCustomerByPhone } from '../queries';
+import { useCustomerSearch } from '../queries';
 import { useCreateOrder } from '../mutations';
 import { STORES } from '../../../constants/stores';
 import { useAuthStore } from '../../../stores/authStore';
@@ -54,8 +54,8 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
   const [customerAddress, setCustomerAddress] = useState('');
   const [existingCustomerId, setExistingCustomerId] = useState<string | undefined>();
 
-  // Customer lookup
-  const { data: foundCustomer } = useCustomerByPhone(customerPhone);
+  // Customer lookup by name
+  const { data: matchingCustomers } = useCustomerSearch(customerName);
 
   // Order fields
   const [store, setStore] = useState(defaultStore);
@@ -93,13 +93,18 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
     onClose();
   }
 
-  // ─── Customer suggestion ─────────────────────────────────────────────────
+  // ─── Customer selection ─────────────────────────────────────────────────
 
-  function handleUseExistingCustomer() {
-    if (!foundCustomer) return;
-    setExistingCustomerId(foundCustomer.id);
-    setCustomerName(foundCustomer.name);
-    setCustomerAddress(foundCustomer.address ?? '');
+  function handleSelectCustomer(customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    address: string | null;
+  }) {
+    setExistingCustomerId(customer.id);
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone ?? '');
+    setCustomerAddress(customer.address ?? '');
   }
 
   // ─── Item management ─────────────────────────────────────────────────────
@@ -162,10 +167,14 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
         Alert.alert('Error', `Item ${idx}: Quantity must be at least 1.`);
         return;
       }
-      const unitPrice = parseFloat(item.unitPrice);
-      if (Number.isNaN(unitPrice) || unitPrice < 0) {
-        Alert.alert('Error', `Item ${idx}: Please enter a valid price.`);
-        return;
+      let unitPrice = 0;
+      if (item.unitPrice.trim()) {
+        const parsed = parseFloat(item.unitPrice);
+        if (Number.isNaN(parsed) || parsed < 0) {
+          Alert.alert('Error', `Item ${idx}: Please enter a valid price.`);
+          return;
+        }
+        unitPrice = parsed;
       }
 
       validatedItems.push({
@@ -229,10 +238,45 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
           <TextInput
             style={styles.input}
             value={customerName}
-            onChangeText={setCustomerName}
+            onChangeText={(text) => {
+              setCustomerName(text);
+              if (existingCustomerId) {
+                setExistingCustomerId(undefined);
+              }
+            }}
             placeholder="Customer name"
             placeholderTextColor="#94A3B8"
           />
+
+          {/* Customer suggestions by name */}
+          {matchingCustomers && matchingCustomers.length > 0 && !existingCustomerId ? (
+            <View style={styles.suggestionsWrapper}>
+              <Text style={styles.suggestionsHeader}>Existing customers (tap to select):</Text>
+              {matchingCustomers.map((cust) => (
+                <Pressable
+                  key={cust.id}
+                  style={styles.suggestion}
+                  onPress={() => handleSelectCustomer(cust)}
+                >
+                  <MaterialCommunityIcons name="account-check" size={18} color="#059669" />
+                  <View style={styles.suggestionContent}>
+                    <Text style={styles.suggestionBold}>{cust.name}</Text>
+                    {cust.phone ? (
+                      <Text style={styles.suggestionPhone}>{cust.phone}</Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.suggestionAction}>Select</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {existingCustomerId ? (
+            <View style={styles.suggestionActive}>
+              <MaterialCommunityIcons name="check-circle" size={16} color="#059669" />
+              <Text style={styles.suggestionActiveText}>Using existing customer record</Text>
+            </View>
+          ) : null}
 
           <Text style={styles.fieldLabel}>Phone</Text>
           <TextInput
@@ -242,27 +286,10 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
               setCustomerPhone(text);
               setExistingCustomerId(undefined);
             }}
-            placeholder="Phone number"
+            placeholder="Phone number (optional)"
             placeholderTextColor="#94A3B8"
             keyboardType="phone-pad"
           />
-
-          {/* Customer suggestion */}
-          {foundCustomer && !existingCustomerId ? (
-            <Pressable style={styles.suggestion} onPress={handleUseExistingCustomer}>
-              <MaterialCommunityIcons name="account-check" size={18} color="#059669" />
-              <Text style={styles.suggestionText}>
-                Existing customer: <Text style={styles.suggestionBold}>{foundCustomer.name}</Text> — tap to use
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {existingCustomerId ? (
-            <View style={styles.suggestionActive}>
-              <MaterialCommunityIcons name="check-circle" size={16} color="#059669" />
-              <Text style={styles.suggestionActiveText}>Using existing customer record</Text>
-            </View>
-          ) : null}
 
           <Text style={styles.fieldLabel}>Address</Text>
           <TextInput
@@ -449,13 +476,13 @@ function OrderItemEditor({
               />
             </View>
             <View style={styles.halfField}>
-              <Text style={styles.fieldLabel}>Price (₹)</Text>
+              <Text style={styles.fieldLabel}>Price (₹) (optional)</Text>
               <TextInput
                 style={styles.input}
                 value={item.unitPrice}
                 onChangeText={(t) => onUpdate(item.key, { unitPrice: t })}
                 keyboardType="numeric"
-                placeholder="0"
+                placeholder="Optional"
                 placeholderTextColor="#94A3B8"
               />
             </View>
@@ -526,19 +553,35 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     paddingTop: 12,
   },
+  suggestionsWrapper: {
+    marginBottom: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    padding: 8,
+    gap: 6,
+  },
+  suggestionsHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#166534',
+    marginBottom: 2,
+  },
   suggestion: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    padding: 8,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
-    padding: 10,
-    marginBottom: 10,
+    borderColor: '#DCFCE7',
   },
-  suggestionText: { flex: 1, fontSize: 13, color: '#065F46' },
-  suggestionBold: { fontWeight: '700' },
+  suggestionContent: { flex: 1 },
+  suggestionBold: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
+  suggestionPhone: { fontSize: 12, color: '#64748B', marginTop: 1 },
+  suggestionAction: { fontSize: 12, fontWeight: '600', color: '#059669' },
   suggestionActive: {
     flexDirection: 'row',
     alignItems: 'center',

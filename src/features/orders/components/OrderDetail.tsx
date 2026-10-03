@@ -1,5 +1,7 @@
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -22,6 +24,55 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
   const { data: order, isLoading, error } = useOrderDetail(orderId ?? '');
   const [showFtIn, setShowFtIn] = useState(false);
   const dimFormat = showFtIn ? formatFtIn : formatMm;
+
+  function handleSendWhatsApp() {
+    if (!order) return;
+    const rawPhone = order.customer.phone?.trim();
+    if (!rawPhone) {
+      Alert.alert(
+        'No Phone Number',
+        'This customer does not have a phone number saved to send via WhatsApp.',
+      );
+      return;
+    }
+
+    // Strip non-digit characters
+    let cleanPhone = rawPhone.replace(/\D/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = `91${cleanPhone}`;
+    }
+
+    const itemsSummary = order.order_items
+      .map(
+        (item, idx) =>
+          `${idx + 1}. *${item.product.name}* (${item.product.thickness_mm}mm)\n   Size: ${dimFormat(
+            item.width_mm,
+          )} × ${dimFormat(item.height_mm)} | Qty: ${item.qty}${
+            item.unit_price > 0 ? ` | ₹${item.unit_price}` : ''
+          }`,
+      )
+      .join('\n');
+
+    const lines = [
+      `*FAKHRI GLASS*`,
+      `Order #${order.order_no} · ${order.store === 'mumbai' ? 'Mumbai' : 'Sanpada'}`,
+      `Customer: *${order.customer.name}*`,
+      order.customer.address ? `Address: ${order.customer.address}` : '',
+      '',
+      `*Items (${order.order_items.length}):*`,
+      itemsSummary,
+      '',
+      order.total > 0 ? `*Total:* ₹${order.total.toLocaleString('en-IN')}` : '',
+      order.notes ? `*Notes:* ${order.notes}` : '',
+    ].filter(Boolean);
+
+    const message = lines.join('\n');
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Unable to open WhatsApp on this device.');
+    });
+  }
 
   if (!orderId) return null;
 
@@ -75,6 +126,17 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
               {order.customer.address ? (
                 <InfoRow icon="map-marker-outline" label="Address" value={order.customer.address} />
               ) : null}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.whatsappBtn,
+                  pressed && styles.whatsappBtnPressed,
+                ]}
+                onPress={handleSendWhatsApp}
+              >
+                <MaterialCommunityIcons name="whatsapp" size={18} color="#FFFFFF" />
+                <Text style={styles.whatsappBtnText}>Send to WhatsApp</Text>
+              </Pressable>
             </SectionCard>
 
             {/* Order info */}
@@ -275,5 +337,24 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'center',
     marginTop: 16,
+  },
+  whatsappBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#25D366',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 8,
+    marginTop: 10,
+  },
+  whatsappBtnPressed: {
+    backgroundColor: '#1EBE5D',
+  },
+  whatsappBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
