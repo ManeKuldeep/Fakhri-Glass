@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useOrderDetail } from '../queries';
 import { formatMm, formatFtIn } from '../../inventory/utils';
 import { useState } from 'react';
+import { printOrderLabels } from '../../labels/services';
 
 interface OrderDetailProps {
   visible: boolean;
@@ -23,7 +24,21 @@ interface OrderDetailProps {
 export default function OrderDetail({ visible, onClose, orderId }: OrderDetailProps) {
   const { data: order, isLoading, error } = useOrderDetail(orderId ?? '');
   const [showFtIn, setShowFtIn] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const dimFormat = showFtIn ? formatFtIn : formatMm;
+
+  async function handlePrintLabels(sharePdf = false) {
+    if (!order) return;
+    try {
+      setIsPrinting(true);
+      await printOrderLabels(order, { sharePdf });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Alert.alert('Label Printing Failed', msg);
+    } finally {
+      setIsPrinting(false);
+    }
+  }
 
   function handleSendWhatsApp() {
     if (!order) return;
@@ -188,6 +203,51 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
                 </View>
               </View>
             ))}
+
+            {/* Piece Labels Section */}
+            <View style={styles.labelsCard}>
+              <View style={styles.labelsCardHeader}>
+                <MaterialCommunityIcons name="label-outline" size={20} color="#1A73E8" />
+                <Text style={styles.labelsCardTitle}>Piece Labels</Text>
+              </View>
+              <Text style={styles.labelsCardSubtitle}>
+                Generate 100×50 mm thermal labels (one label per physical piece).
+              </Text>
+
+              <View style={styles.labelButtonsRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.printLabelsBtn,
+                    pressed && styles.printLabelsBtnPressed,
+                    isPrinting && styles.btnDisabled,
+                  ]}
+                  onPress={() => handlePrintLabels(false)}
+                  disabled={isPrinting}
+                >
+                  {isPrinting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="printer" size={18} color="#FFFFFF" />
+                      <Text style={styles.printLabelsBtnText}>Print Labels</Text>
+                    </>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.shareLabelsBtn,
+                    pressed && styles.shareLabelsBtnPressed,
+                    isPrinting && styles.btnDisabled,
+                  ]}
+                  onPress={() => handlePrintLabels(true)}
+                  disabled={isPrinting}
+                >
+                  <MaterialCommunityIcons name="share-variant-outline" size={18} color="#1A73E8" />
+                  <Text style={styles.shareLabelsBtnText}>Share PDF</Text>
+                </Pressable>
+              </View>
+            </View>
 
             {/* Created date */}
             <Text style={styles.createdAt}>
@@ -356,5 +416,74 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  labelsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  labelsCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  labelsCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  labelsCardSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 12,
+  },
+  labelButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  printLabelsBtn: {
+    flex: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A73E8',
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  printLabelsBtnPressed: {
+    backgroundColor: '#1557B0',
+  },
+  printLabelsBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  shareLabelsBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  shareLabelsBtnPressed: {
+    backgroundColor: '#DBEAFE',
+  },
+  shareLabelsBtnText: {
+    color: '#1A73E8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  btnDisabled: {
+    opacity: 0.6,
   },
 });

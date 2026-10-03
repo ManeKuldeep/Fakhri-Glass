@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { CuttingProductQueueItem, CuttingSheet } from './types';
+import { CuttingQueueTask, CuttingSheet } from './types';
 
 export const cuttingKeys = {
   all: ['cutting'] as const,
@@ -13,7 +13,22 @@ interface FetchQueueFilters {
   store?: string;
 }
 
-export async function fetchCuttingQueue(filters?: FetchQueueFilters) {
+export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<CuttingQueueTask[]> {
+  // 1. Fetch all confirmed cut plans to exclude already confirmed items
+  const { data: confirmedPlans, error: plansErr } = await supabase
+    .from('cut_plans')
+    .select('order_id, product_id');
+
+  if (plansErr) throw new Error(plansErr.message);
+
+  const confirmedSet = new Set<string>();
+  if (confirmedPlans) {
+    for (const cp of confirmedPlans) {
+      confirmedSet.add(`${cp.order_id}:${cp.product_id}`);
+    }
+  }
+
+  // 2. Fetch orders in 'new' or 'cutting' status
   let query = supabase
     .from('orders')
     .select(
@@ -59,14 +74,24 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters) {
   if (error) throw new Error(error.message);
   if (!orders) return [];
 
-  // Group pending order items by product
-  const productMap = new Map<string, CuttingProductQueueItem>();
+  // Group by (order_id, product_id)
+  const taskMap = new Map<string, CuttingQueueTask>();
 
   for (const order of orders) {
     for (const item of order.order_items) {
       const prod = item.product;
-      if (!productMap.has(prod.id)) {
-        productMap.set(prod.id, {
+      const key = `${order.id}:${prod.id}`;
+
+      // Skip if this product in this order already has a confirmed cut plan
+      if (confirmedSet.has(key)) continue;
+
+      if (!taskMap.has(key)) {
+        taskMap.set(key, {
+          orderId: order.id,
+          orderNo: order.order_no,
+          store: order.store,
+          customerName: order.customer.name,
+          customerPhone: order.customer.phone,
           productId: prod.id,
           productName: prod.name,
           categoryName: prod.category.name,
@@ -78,13 +103,10 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters) {
         });
       }
 
-      const entry = productMap.get(prod.id)!;
-      entry.totalPiecesCount += item.qty;
-      entry.orderItems.push({
+      const task = taskMap.get(key)!;
+      task.totalPiecesCount += item.qty;
+      task.orderItems.push({
         orderItemId: item.id,
-        orderId: order.id,
-        orderNo: order.order_no,
-        customerName: order.customer.name,
         widthMm: item.width_mm,
         heightMm: item.height_mm,
         qty: item.qty,
@@ -92,7 +114,7 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters) {
     }
   }
 
-  return Array.from(productMap.values()).filter((p) => p.totalPiecesCount > 0);
+  return Array.from(taskMap.values()).filter((t) => t.totalPiecesCount > 0);
 }
 
 export async function fetchStockForProduct(productId: string): Promise<CuttingSheet[]> {
@@ -101,7 +123,7 @@ export async function fetchStockForProduct(productId: string): Promise<CuttingSh
     .select('id, width_mm, height_mm, source, status, vertical_line_height_mm')
     .eq('product_id', productId)
     .eq('status', 'available')
-    .order('source', { ascending: false }); // 'offcut' first if alphabetic? We will sort properly in optimizer
+    .order('source', { ascending: false }); // offcut first, then full
 
   if (error) throw new Error(error.message);
   if (!data) return [];

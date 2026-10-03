@@ -3,23 +3,22 @@ import { StyleSheet, View } from 'react-native';
 import OrderQueueList from '../../src/features/cutting/components/OrderQueueList';
 import CutWorkspace from '../../src/features/cutting/components/CutWorkspace';
 import CutSettingsModal from '../../src/features/cutting/components/CutSettingsModal';
-import { CuttingProductQueueItem } from '../../src/features/cutting/types';
+import { CuttingQueueTask } from '../../src/features/cutting/types';
 
 export default function CutScreen() {
-  const [selectedProduct, setSelectedProduct] =
-    useState<CuttingProductQueueItem | null>(null);
+  const [selectedTask, setSelectedTask] = useState<CuttingQueueTask | null>(null);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
 
   return (
     <View style={styles.container}>
-      {selectedProduct ? (
+      {selectedTask ? (
         <CutWorkspace
-          productQueueItem={selectedProduct}
-          onBack={() => setSelectedProduct(null)}
+          task={selectedTask}
+          onBack={() => setSelectedTask(null)}
         />
       ) : (
         <OrderQueueList
-          onSelectProduct={(item) => setSelectedProduct(item)}
+          onSelectTask={(task) => setSelectedTask(task)}
           onOpenSettings={() => setSettingsModalVisible(true)}
         />
       )}

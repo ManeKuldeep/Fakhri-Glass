@@ -11,15 +11,15 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STORES } from '../../../constants/stores';
 import { useAuthStore } from '../../../stores/authStore';
 import { useCuttingQueue } from '../queries';
-import { CuttingProductQueueItem } from '../types';
+import { CuttingQueueTask } from '../types';
 
 interface OrderQueueListProps {
-  onSelectProduct: (productQueueItem: CuttingProductQueueItem) => void;
+  onSelectTask: (task: CuttingQueueTask) => void;
   onOpenSettings: () => void;
 }
 
 export default function OrderQueueList({
-  onSelectProduct,
+  onSelectTask,
   onOpenSettings,
 }: OrderQueueListProps) {
   const profile = useAuthStore((s) => s.profile);
@@ -33,11 +33,21 @@ export default function OrderQueueList({
 
   const { data: queue, isLoading, error, refetch } = useCuttingQueue(storeFilter);
 
-  const renderProductCard = ({ item }: { item: CuttingProductQueueItem }) => {
+  const renderTaskCard = ({ item }: { item: CuttingQueueTask }) => {
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.titleArea}>
+            <View style={styles.orderBadgeRow}>
+              <Text style={styles.orderNoBadge}>Order #{item.orderNo}</Text>
+              <View style={styles.storeBadge}>
+                <Text style={styles.storeBadgeText}>
+                  {item.store === 'mumbai' ? 'Mumbai' : 'Sanpada'}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.customerName}>{item.customerName}</Text>
             <Text style={styles.productName}>{item.productName}</Text>
             <Text style={styles.categoryText}>
               {item.categoryName} · {item.thicknessMm} mm
@@ -64,19 +74,20 @@ export default function OrderQueueList({
           <View style={styles.statBox}>
             <Text style={styles.statNumber}>{item.orderItems.length}</Text>
             <Text style={styles.statLabel}>
-              {item.orderItems.length === 1 ? 'Order Item' : 'Order Items'}
+              {item.orderItems.length === 1 ? 'Size Spec' : 'Size Specs'}
             </Text>
           </View>
         </View>
 
-        {/* Breakdown of orders */}
+        {/* Breakdown of sizes */}
         <View style={styles.ordersList}>
           {item.orderItems.map((oi) => (
             <View key={oi.orderItemId} style={styles.orderItemRow}>
-              <Text style={styles.orderNo}>Order #{oi.orderNo}</Text>
-              <Text style={styles.customerName}>{oi.customerName}</Text>
               <Text style={styles.dimensionTag}>
-                {oi.widthMm} × {oi.heightMm} mm ({oi.qty} pcs)
+                {oi.widthMm} × {oi.heightMm} mm
+              </Text>
+              <Text style={styles.qtyTag}>
+                {oi.qty} {oi.qty === 1 ? 'pc' : 'pcs'}
               </Text>
             </View>
           ))}
@@ -85,10 +96,10 @@ export default function OrderQueueList({
         {/* Action Button */}
         <Pressable
           style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
-          onPress={() => onSelectProduct(item)}
+          onPress={() => onSelectTask(item)}
         >
           <MaterialCommunityIcons name="content-cut" size={18} color="#FFFFFF" />
-          <Text style={styles.actionBtnText}>Open Cut Optimiser</Text>
+          <Text style={styles.actionBtnText}>Open Cut Layout</Text>
         </Pressable>
       </View>
     );
@@ -143,7 +154,7 @@ export default function OrderQueueList({
       {isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#1A73E8" />
-          <Text style={styles.loadingText}>Loading pending cut queue...</Text>
+          <Text style={styles.loadingText}>Loading pending cut tasks...</Text>
         </View>
       ) : error ? (
         <View style={styles.centered}>
@@ -156,8 +167,8 @@ export default function OrderQueueList({
       ) : queue && queue.length > 0 ? (
         <FlatList
           data={queue}
-          keyExtractor={(item) => item.productId}
-          renderItem={renderProductCard}
+          keyExtractor={(item) => `${item.orderId}:${item.productId}`}
+          renderItem={renderTaskCard}
           contentContainerStyle={styles.listContent}
         />
       ) : (
@@ -165,7 +176,7 @@ export default function OrderQueueList({
           <MaterialCommunityIcons name="check-decagram-outline" size={56} color="#10B981" />
           <Text style={styles.emptyTitle}>All Caught Up!</Text>
           <Text style={styles.emptySubtext}>
-            There are no pending orders waiting to be cut.
+            There are no pending items waiting to be cut.
           </Text>
         </View>
       )}
@@ -241,13 +252,40 @@ const styles = StyleSheet.create({
   titleArea: {
     flex: 1,
   },
+  orderBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  orderNoBadge: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  storeBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  storeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  customerName: {
+    fontSize: 13,
+    color: '#475569',
+    marginBottom: 4,
+  },
   productName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#0F172A',
   },
   categoryText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748B',
     marginTop: 2,
   },
@@ -297,21 +335,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
-  orderNo: {
+  dimensionTag: {
     fontSize: 13,
     fontWeight: '600',
     color: '#1E293B',
-    width: 90,
   },
-  customerName: {
-    flex: 1,
-    fontSize: 13,
-    color: '#475569',
-    paddingHorizontal: 6,
-  },
-  dimensionTag: {
+  qtyTag: {
     fontSize: 12,
     color: '#64748B',
     fontWeight: '500',

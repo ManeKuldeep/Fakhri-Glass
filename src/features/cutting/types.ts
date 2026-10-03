@@ -22,7 +22,12 @@ export interface CuttingSheet extends OptimizerSheet {
   isNewBlankSheet?: boolean;
 }
 
-export interface CuttingProductQueueItem {
+export interface CuttingQueueTask {
+  orderId: string;
+  orderNo: number;
+  store: string;
+  customerName: string;
+  customerPhone: string | null;
   productId: string;
   productName: string;
   categoryName: string;
@@ -32,9 +37,6 @@ export interface CuttingProductQueueItem {
   totalPiecesCount: number;
   orderItems: {
     orderItemId: string;
-    orderId: string;
-    orderNo: number;
-    customerName: string;
     widthMm: number;
     heightMm: number;
     qty: number;
