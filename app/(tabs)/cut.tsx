@@ -1,12 +1,33 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import OrderQueueList from '../../src/features/cutting/components/OrderQueueList';
+import CutWorkspace from '../../src/features/cutting/components/CutWorkspace';
+import CutSettingsModal from '../../src/features/cutting/components/CutSettingsModal';
+import { CuttingProductQueueItem } from '../../src/features/cutting/types';
 
 export default function CutScreen() {
+  const [selectedProduct, setSelectedProduct] =
+    useState<CuttingProductQueueItem | null>(null);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Cut</Text>
-      <Text style={styles.subtext}>
-        Cutting optimiser coming in Phase 4–5.
-      </Text>
+      {selectedProduct ? (
+        <CutWorkspace
+          productQueueItem={selectedProduct}
+          onBack={() => setSelectedProduct(null)}
+        />
+      ) : (
+        <OrderQueueList
+          onSelectProduct={(item) => setSelectedProduct(item)}
+          onOpenSettings={() => setSettingsModalVisible(true)}
+        />
+      )}
+
+      <CutSettingsModal
+        visible={settingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+      />
     </View>
   );
 }
@@ -14,20 +35,6 @@ export default function CutScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 24,
-  },
-  heading: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 8,
-  },
-  subtext: {
-    fontSize: 15,
-    color: '#64748B',
-    textAlign: 'center',
+    backgroundColor: '#FFFFFF',
   },
 });
