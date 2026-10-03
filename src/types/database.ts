@@ -656,6 +656,19 @@ export type Database = {
         }
         Returns: string
       }
+      create_order_with_items: {
+        Args: {
+          p_customer_id: string
+          p_items?: Json
+          p_notes?: string
+          p_payment_method?: string
+          p_store: string
+        }
+        Returns: {
+          id: string
+          order_no: number
+        }[]
+      }
       log_event: { Args: { p_summary: string }; Returns: undefined }
     }
     Enums: {

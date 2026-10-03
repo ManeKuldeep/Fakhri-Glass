@@ -30,7 +30,6 @@ export default function AddStockForm({ visible, onClose }: AddStockFormProps) {
   const [heightMm, setHeightMm] = useState<number | null>(null);
   const [lineHeightMm, setLineHeightMm] = useState<number | null>(null);
   const [quantityText, setQuantityText] = useState('1');
-  const [error, setError] = useState<string | null>(null);
 
   const addStock = useAddStock();
 
@@ -44,7 +43,6 @@ export default function AddStockForm({ visible, onClose }: AddStockFormProps) {
     setHeightMm(null);
     setLineHeightMm(null);
     setQuantityText('1');
-    setError(null);
   }
 
   function handleClose() {
@@ -53,27 +51,28 @@ export default function AddStockForm({ visible, onClose }: AddStockFormProps) {
   }
 
   function handleSubmit() {
-    setError(null);
-
     if (!selectedProductId) {
-      setError('Please select a product.');
+      Alert.alert('Error', 'Please select a product.');
       return;
     }
 
     if (widthMm == null || widthMm <= 0) {
-      setError('Please enter a valid width.');
+      Alert.alert('Error', 'Please enter a valid width.');
       return;
     }
 
     if (heightMm == null || heightMm <= 0) {
-      setError('Please enter a valid height.');
+      Alert.alert('Error', 'Please enter a valid height.');
       return;
     }
 
     let verticalLineHeightMm: number | null = null;
     if (isLining) {
       if (lineHeightMm == null || lineHeightMm <= 0) {
-        setError('Figured glass requires a vertical line height. Please enter it.');
+        Alert.alert(
+          'Error',
+          'Figured glass requires a vertical line height. Please enter it.',
+        );
         return;
       }
       verticalLineHeightMm = lineHeightMm;
@@ -81,11 +80,14 @@ export default function AddStockForm({ visible, onClose }: AddStockFormProps) {
 
     const qty = parseInt(quantityText, 10);
     if (Number.isNaN(qty) || qty < 1) {
-      setError('Quantity must be at least 1.');
+      Alert.alert('Error', 'Quantity must be at least 1.');
       return;
     }
     if (qty > 50) {
-      setError('Maximum 50 sheets per batch. Add more in a separate batch.');
+      Alert.alert(
+        'Error',
+        'Maximum 50 sheets per batch. Add more in a separate batch.',
+      );
       return;
     }
 
@@ -106,7 +108,7 @@ export default function AddStockForm({ visible, onClose }: AddStockFormProps) {
           handleClose();
         },
         onError: (err) => {
-          setError(err.message);
+          Alert.alert('Error', err.message);
         },
       },
     );
@@ -133,13 +135,6 @@ export default function AddStockForm({ visible, onClose }: AddStockFormProps) {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Error */}
-          {error ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
           {/* Category picker */}
           <Text style={styles.label}>Category</Text>
           <ScrollView
@@ -300,19 +295,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 20,
     paddingBottom: 40,
-  },
-  errorBox: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    padding: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 14,
-    lineHeight: 20,
   },
   label: {
     fontSize: 14,

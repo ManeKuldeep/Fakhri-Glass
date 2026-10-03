@@ -34,7 +34,6 @@ export default function EditStockForm({ visible, onClose, item }: EditStockFormP
   const [widthMm, setWidthMm] = useState<number | null>(null);
   const [heightMm, setHeightMm] = useState<number | null>(null);
   const [lineHeightMm, setLineHeightMm] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   // Track a key to force DimensionInput re-mount when item changes
   const [formKey, setFormKey] = useState(0);
@@ -48,29 +47,30 @@ export default function EditStockForm({ visible, onClose, item }: EditStockFormP
       setWidthMm(item.width_mm);
       setHeightMm(item.height_mm);
       setLineHeightMm(item.vertical_line_height_mm);
-      setError(null);
       setFormKey((k) => k + 1);
     }
   }, [item]);
 
   function handleSave() {
     if (!item) return;
-    setError(null);
 
     if (widthMm == null || widthMm <= 0) {
-      setError('Please enter a valid width.');
+      Alert.alert('Error', 'Please enter a valid width.');
       return;
     }
 
     if (heightMm == null || heightMm <= 0) {
-      setError('Please enter a valid height.');
+      Alert.alert('Error', 'Please enter a valid height.');
       return;
     }
 
     let verticalLineHeightMm: number | null = null;
     if (isLining) {
       if (lineHeightMm == null || lineHeightMm <= 0) {
-        setError('Figured glass requires a vertical line height.');
+        Alert.alert(
+          'Error',
+          'Figured glass requires a vertical line height.',
+        );
         return;
       }
       verticalLineHeightMm = lineHeightMm;
@@ -89,7 +89,7 @@ export default function EditStockForm({ visible, onClose, item }: EditStockFormP
           onClose();
         },
         onError: (err) => {
-          setError(err.message);
+          Alert.alert('Error', err.message);
         },
       },
     );
@@ -125,13 +125,6 @@ export default function EditStockForm({ visible, onClose, item }: EditStockFormP
               {item.product.category.name} · {item.product.thickness_mm} mm
             </Text>
           </View>
-
-          {/* Error */}
-          {error ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
 
           {/* Dimensions — key forces re-mount to pick up new initialMm */}
           <DimensionInput
@@ -236,19 +229,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748B',
     marginTop: 2,
-  },
-  errorBox: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    padding: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 14,
-    lineHeight: 20,
   },
   liningSection: {
     marginBottom: 4,
