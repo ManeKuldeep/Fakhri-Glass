@@ -1,8 +1,37 @@
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+import type * as PrintType from 'expo-print';
+import type * as SharingType from 'expo-sharing';
 import { logEvent } from '../../lib/logEvent';
 import { OrderWithItemsForLabels } from './types';
 import { generateLabelsHtml, generatePieceLabelsFromOrder } from './utils';
+
+/**
+ * Lazily loads expo-print so missing native modules don't crash
+ * the entire app on boot when running an APK built before the package was installed.
+ */
+function getPrintModule(): typeof PrintType {
+  try {
+    return require('expo-print');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Cannot find native module') || msg.includes('ExpoPrint')) {
+      throw new Error(
+        'Native module ExpoPrint is not compiled into the current Android build. Please rebuild the app with "npx expo run:android" to enable thermal label printing.',
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Lazily loads expo-sharing if available.
+ */
+function getSharingModule(): typeof SharingType | null {
+  try {
+    return require('expo-sharing');
+  } catch {
+    return null;
+  }
+}
 
 export async function printOrderLabels(
   order: OrderWithItemsForLabels,
@@ -15,6 +44,8 @@ export async function printOrderLabels(
   }
 
   const html = generateLabelsHtml(pieceLabels);
+  const Print = getPrintModule();
+  const Sharing = getSharingModule();
 
   // 100mm × 50mm in standard PDF points (1mm = 2.83465 points)
   const widthPoints = 283.46;
@@ -27,7 +58,7 @@ export async function printOrderLabels(
       height: heightPoints,
     });
 
-    if (await Sharing.isAvailableAsync()) {
+    if (Sharing && (await Sharing.isAvailableAsync())) {
       await Sharing.shareAsync(uri, {
         UTI: '.pdf',
         mimeType: 'application/pdf',
@@ -52,3 +83,4 @@ export async function printOrderLabels(
 
   return { totalPieces: pieceLabels.length };
 }
+
