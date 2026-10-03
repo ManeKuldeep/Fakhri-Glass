@@ -28,10 +28,20 @@ interface OrderItemDraft {
   heightMm: number | null;
   qty: string;
   unitPrice: string;
+  isPolished: boolean;
 }
 
 function emptyItem(key: number): OrderItemDraft {
-  return { key, categoryId: undefined, productId: undefined, widthMm: null, heightMm: null, qty: '1', unitPrice: '' };
+  return {
+    key,
+    categoryId: undefined,
+    productId: undefined,
+    widthMm: null,
+    heightMm: null,
+    qty: '1',
+    unitPrice: '',
+    isPolished: false,
+  };
 }
 
 interface CreateOrderFormProps {
@@ -183,7 +193,9 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
         heightMm: item.heightMm,
         qty,
         unitPrice,
+        isPolished: item.isPolished,
       });
+
     }
 
     createOrder.mutate(
@@ -488,6 +500,69 @@ function OrderItemEditor({
             </View>
           </View>
 
+          {/* Polishing / Edge Finish */}
+          <View style={styles.polishSection}>
+            <Text style={styles.fieldLabel}>Edge Finish</Text>
+            <View style={styles.polishToggleRow}>
+              <Pressable
+                style={[
+                  styles.polishOption,
+                  !item.isPolished && styles.polishOptionActive,
+                ]}
+                onPress={() => onUpdate(item.key, { isPolished: false })}
+              >
+                <MaterialCommunityIcons
+                  name={!item.isPolished ? 'radiobox-marked' : 'radiobox-blank'}
+                  size={16}
+                  color={!item.isPolished ? '#1A73E8' : '#64748B'}
+                />
+                <Text
+                  style={[
+                    styles.polishOptionText,
+                    !item.isPolished && styles.polishOptionTextActive,
+                  ]}
+                >
+                  Non-Polished
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.polishOption,
+                  item.isPolished && styles.polishOptionActive,
+                ]}
+                onPress={() => onUpdate(item.key, { isPolished: true })}
+              >
+                <MaterialCommunityIcons
+                  name={item.isPolished ? 'radiobox-marked' : 'radiobox-blank'}
+                  size={16}
+                  color={item.isPolished ? '#1A73E8' : '#64748B'}
+                />
+                <Text
+                  style={[
+                    styles.polishOptionText,
+                    item.isPolished && styles.polishOptionTextActive,
+                  ]}
+                >
+                  Polished (+3mm)
+                </Text>
+              </Pressable>
+            </View>
+
+            {item.isPolished && item.widthMm && item.heightMm ? (
+              <View style={styles.polishNoticeBox}>
+                <MaterialCommunityIcons name="information-outline" size={14} color="#047857" />
+                <Text style={styles.polishNoticeText}>
+                  Finished: {item.widthMm} × {item.heightMm} mm → Will cut at{' '}
+                  <Text style={styles.polishNoticeBold}>
+                    {item.widthMm + 3} × {item.heightMm + 3} mm
+                  </Text>{' '}
+                  (+3mm vertically & horizontally for polishing allowance).
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
           {/* Line total */}
           {(() => {
             const linePrice = parseFloat(item.unitPrice) || 0;
@@ -670,4 +745,60 @@ const styles = StyleSheet.create({
   submitBtnPressed: { backgroundColor: '#1557B0' },
   submitBtnDisabled: { opacity: 0.7 },
   submitText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  polishSection: {
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  polishToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  polishOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  polishOptionActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  polishOptionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  polishOptionTextActive: {
+    color: '#1A73E8',
+  },
+  polishNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  polishNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#065F46',
+    lineHeight: 15,
+  },
+  polishNoticeBold: {
+    fontWeight: '700',
+    color: '#047857',
+  },
 });
+

@@ -591,9 +591,10 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
                               },
                               order_items: task.orderItems.map((oi) => ({
                                 id: oi.orderItemId,
-                                width_mm: oi.widthMm,
-                                height_mm: oi.heightMm,
+                                width_mm: oi.finishedWidthMm ?? oi.widthMm,
+                                height_mm: oi.finishedHeightMm ?? oi.heightMm,
                                 qty: oi.qty,
+                                is_polished: oi.isPolished,
                                 product: {
                                   name: task.productName,
                                   thickness_mm: task.thicknessMm,

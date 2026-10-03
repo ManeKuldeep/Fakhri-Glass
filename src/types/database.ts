@@ -290,6 +290,7 @@ export type Database = {
         Row: {
           height_mm: number
           id: string
+          is_polished: boolean
           line_total: number
           order_id: string
           product_id: string
@@ -301,6 +302,7 @@ export type Database = {
         Insert: {
           height_mm: number
           id?: string
+          is_polished?: boolean
           line_total?: number
           order_id: string
           product_id: string
@@ -312,6 +314,7 @@ export type Database = {
         Update: {
           height_mm?: number
           id?: string
+          is_polished?: boolean
           line_total?: number
           order_id?: string
           product_id?: string

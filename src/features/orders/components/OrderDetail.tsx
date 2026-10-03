@@ -212,7 +212,7 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
                       setInspectPiece({
                         widthMm: item.width_mm,
                         heightMm: item.height_mm,
-                        title: item.product.name,
+                        title: item.is_polished ? `${item.product.name} (Polished)` : item.product.name,
                         categoryName: item.product.category.name,
                         thicknessMm: item.product.thickness_mm,
                         color: item.product.color,
@@ -223,7 +223,14 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
                   />
                   <View style={styles.itemMainInfo}>
                     <View style={styles.itemHeader}>
-                      <Text style={styles.itemName}>{item.product.name}</Text>
+                      <View style={styles.itemNameRow}>
+                        <Text style={styles.itemName}>{item.product.name}</Text>
+                        {item.is_polished ? (
+                          <View style={styles.polishedBadge}>
+                            <Text style={styles.polishedBadgeText}>Polished</Text>
+                          </View>
+                        ) : null}
+                      </View>
                       <Text style={styles.itemCategory}>
                         {item.product.category.name} · {item.product.thickness_mm}mm
                       </Text>
@@ -231,6 +238,11 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
                     <View style={styles.itemDetails}>
                       <Text style={styles.itemDetail}>
                         {dimFormat(item.width_mm)} × {dimFormat(item.height_mm)}
+                        {item.is_polished ? (
+                          <Text style={styles.cutSizeDetail}>
+                            {' '}(Cut: {dimFormat(item.width_mm + 3)} × {dimFormat(item.height_mm + 3)})
+                          </Text>
+                        ) : null}
                       </Text>
                       <Text style={styles.itemDetail}>Qty: {item.qty}</Text>
                       <Text style={styles.itemDetail}>
@@ -491,10 +503,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemHeader: { marginBottom: 6 },
+  itemNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  polishedBadge: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  polishedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
   itemName: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
   itemCategory: { fontSize: 12, color: '#64748B', marginTop: 2 },
   itemDetails: { gap: 3 },
   itemDetail: { fontSize: 13, color: '#475569' },
+  cutSizeDetail: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '600',
+  },
   createdAt: {
     fontSize: 12,
     color: '#94A3B8',

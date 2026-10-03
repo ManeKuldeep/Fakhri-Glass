@@ -122,6 +122,7 @@ async function fetchOrderDetail(id: string) {
         qty,
         unit_price,
         line_total,
+        is_polished,
         product:products!inner (
           id,
           name,

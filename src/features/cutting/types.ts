@@ -40,5 +40,9 @@ export interface CuttingQueueTask {
     widthMm: number;
     heightMm: number;
     qty: number;
+    isPolished?: boolean;
+    finishedWidthMm?: number;
+    finishedHeightMm?: number;
   }[];
 }
+

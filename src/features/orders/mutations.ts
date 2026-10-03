@@ -10,6 +10,7 @@ interface OrderItemInput {
   heightMm: number;
   qty: number;
   unitPrice: number;
+  isPolished?: boolean;
 }
 
 interface CreateOrderInput {
@@ -74,6 +75,7 @@ export function useCreateOrder() {
         height_mm: item.heightMm,
         qty: item.qty,
         unit_price: item.unitPrice,
+        is_polished: item.isPolished ?? false,
       }));
 
       const { data, error: rpcErr } = await supabase

@@ -122,5 +122,45 @@ describe('Piece Labels Generator & HTML Tests', () => {
       expect(html).toContain('&lt;script&gt;');
       expect(html).toContain('&amp; Co.');
     });
+
+    it('renders POLISHED badge and adds +3mm to cut dimensions when is_polished is true', () => {
+      const polishedOrder: OrderWithItemsForLabels = {
+        id: 'ord-polished',
+        order_no: 202,
+        store: 'mumbai',
+        customer: {
+          name: 'Ibrahim Glassworks',
+          phone: '9820098200',
+        },
+        order_items: [
+          {
+            id: 'oi-pol-1',
+            width_mm: 600,
+            height_mm: 900,
+            qty: 2,
+            is_polished: true,
+            product: {
+              name: 'Toughened Glass',
+              thickness_mm: 8,
+              color: 'Clear',
+            },
+          },
+        ],
+      };
+
+      const labels = generatePieceLabelsFromOrder(polishedOrder);
+      expect(labels).toHaveLength(2);
+      expect(labels[0].isPolished).toBe(true);
+      expect(labels[0].widthMm).toBe(600);
+      expect(labels[0].heightMm).toBe(900);
+      expect(labels[0].cutWidthMm).toBe(603);
+      expect(labels[0].cutHeightMm).toBe(903);
+      expect(labels[0].formattedDimensions).toContain('600 × 900 mm');
+      expect(labels[0].formattedDimensions).toContain('Cut: 603 × 903 mm [POLISHED]');
+
+      const html = generateLabelsHtml(labels);
+      expect(html).toContain('<span class="polished-badge">POLISHED</span>');
+      expect(html).toContain('Cut: 603 × 903 mm [POLISHED]');
+    });
   });
 });

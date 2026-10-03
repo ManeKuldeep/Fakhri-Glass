@@ -49,6 +49,7 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
         width_mm,
         height_mm,
         qty,
+        is_polished,
         product:products!inner (
           id,
           name,
@@ -104,12 +105,18 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
       }
 
       const task = taskMap.get(key)!;
+      const isPolished = Boolean(item.is_polished);
+      const allowance = isPolished ? 3 : 0;
+
       task.totalPiecesCount += item.qty;
       task.orderItems.push({
         orderItemId: item.id,
-        widthMm: item.width_mm,
-        heightMm: item.height_mm,
+        widthMm: item.width_mm + allowance,
+        heightMm: item.height_mm + allowance,
         qty: item.qty,
+        isPolished,
+        finishedWidthMm: item.width_mm,
+        finishedHeightMm: item.height_mm,
       });
     }
   }

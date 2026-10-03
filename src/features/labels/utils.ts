@@ -16,9 +16,14 @@ export function generatePieceLabelsFromOrder(
   const storeLabel = storeKey === 'sanpada' ? 'Sanpada' : 'Mumbai';
 
   for (const item of order.order_items) {
+    const isPolished = Boolean(item.is_polished);
+    const cutW = isPolished ? item.width_mm + 3 : item.width_mm;
+    const cutH = isPolished ? item.height_mm + 3 : item.height_mm;
     const wFtIn = formatFtIn(item.width_mm);
     const hFtIn = formatFtIn(item.height_mm);
-    const formattedDimensions = `${item.width_mm} × ${item.height_mm} mm (${wFtIn} × ${hFtIn})`;
+    const formattedDimensions = isPolished
+      ? `${item.width_mm} × ${item.height_mm} mm (${wFtIn} × ${hFtIn}) · Cut: ${cutW} × ${cutH} mm [POLISHED]`
+      : `${item.width_mm} × ${item.height_mm} mm (${wFtIn} × ${hFtIn})`;
 
     for (let i = 1; i <= item.qty; i++) {
       labels.push({
@@ -35,6 +40,9 @@ export function generatePieceLabelsFromOrder(
         formattedDimensions,
         pieceIndex: i,
         totalQty: item.qty,
+        isPolished,
+        cutWidthMm: cutW,
+        cutHeightMm: cutH,
       });
     }
   }
@@ -77,9 +85,12 @@ export function generateLabelsHtml(labels: PieceLabelData[]): string {
         <div class="divider"></div>
 
         <div class="product-info">
-          <div class="product-name">${escapeHtml(l.productName)} (${l.thicknessMm} mm${
-            l.color ? ` · ${escapeHtml(l.color)}` : ''
-          })</div>
+          <div class="product-name">
+            ${escapeHtml(l.productName)} (${l.thicknessMm} mm${
+              l.color ? ` · ${escapeHtml(l.color)}` : ''
+            })
+            ${l.isPolished ? '<span class="polished-badge">POLISHED</span>' : ''}
+          </div>
           <div class="dimension-line">${escapeHtml(l.formattedDimensions)}</div>
         </div>
       </div>
@@ -183,6 +194,16 @@ export function generateLabelsHtml(labels: PieceLabelData[]): string {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+          }
+          .polished-badge {
+            font-size: 7.5pt;
+            font-weight: 800;
+            background: #000000;
+            color: #ffffff;
+            padding: 1px 4px;
+            border-radius: 2px;
+            margin-left: 4px;
+            vertical-align: middle;
           }
           .dimension-line {
             font-size: 11pt;

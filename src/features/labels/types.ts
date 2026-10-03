@@ -12,6 +12,9 @@ export interface PieceLabelData {
   formattedDimensions: string; // e.g. "400 × 500 mm (1' 4" × 1' 8")"
   pieceIndex: number; // 1-indexed
   totalQty: number; // total in this item
+  isPolished?: boolean;
+  cutWidthMm?: number;
+  cutHeightMm?: number;
 }
 
 export interface OrderWithItemsForLabels {
@@ -27,6 +30,7 @@ export interface OrderWithItemsForLabels {
     width_mm: number;
     height_mm: number;
     qty: number;
+    is_polished?: boolean;
     product: {
       name: string;
       thickness_mm: number;
@@ -34,3 +38,4 @@ export interface OrderWithItemsForLabels {
     };
   }[];
 }
+

@@ -82,19 +82,22 @@ graph TD
    - **Delivery Date:** Select a date.
 4. **Store Selection:**
    - Observe the Store dropdown provides strictly **Mumbai** or **Sanpada** (defaulting to the active user's assigned store, but selectable).
-5. **Add Order Items:**
-   - **Item 1:**
+5. **Add Order Items & Edge Finish:**
+   - **Item 1 (Polished Glass Example):**
      - Product: `5 mm Clear Glass`
      - Width: `600 mm` | Height: `900 mm`
      - Quantity: `3`
+     - **Edge Finish:** Select **"Polished (+3mm)"** (defaults to *Non-Polished*).
+     - Notice the live hint: *"Finished: 600 × 900 mm → Will cut at 603 × 903 mm (+3mm allowance for polishing ground loss)"*.
      - Unit Price: `₹450` $\rightarrow$ Tap **Add Item**.
-   - **Item 2:**
+   - **Item 2 (Standard Non-Polished):**
      - Product: `5 mm Clear Moru` (Figured Glass)
      - Width: `500 mm` | Height: `800 mm`
      - Quantity: `2`
+     - **Edge Finish:** Keep default **"Non-Polished"**.
      - Unit Price: `₹600` $\rightarrow$ Tap **Add Item**.
 6. **Payment & Notes:**
-   - Order total is calculated automatically.
+   - Order total is calculated automatically based on entered dimensions.
    - Enter **Advance Paid:** `₹1,000`.
    - Payment Method: Select `UPI`, `Cash`, `Card`, etc.
    - Notes: e.g., `Polished edges requested`.
@@ -104,11 +107,12 @@ graph TD
 8. **WhatsApp Share:**
    - Tap the created order to open the **Order Detail** screen.
    - Tap **"Send to WhatsApp"**: Opens WhatsApp with a pre-formatted message listing the store, customer name, line items with dimensions, total, and balance due.
-9. **Order Visualizers:**
+9. **Order Visualizers & Polished Badges:**
+   - **Polished Identification:** Notice the blue **"Polished"** badge on polished line items, showing both customer finished size and physical cut size (`600 × 900 mm (Cut: 603 × 903 mm)`).
    - **Piece Inspection:** In the items list, notice the mini visual thumbnail next to each item. Tap any piece thumbnail to inspect its proportional aspect ratio, area (sq. ft and m²), and texture orientation.
    - **Main Sheet Cut Layout:** Once an order's cut plan is confirmed by the cutter, a green **"Main Sheet Cut Layout"** card appears in the Order Detail screen. Tap **"Visualize Sheet Cuts"** to see:
      - The physical parent sheet (full sheet or offcut) drawn to scale.
-     - The exact positioned pieces cut from it with coordinate tags (`X`, `Y`) and piece numbers.
+     - The exact positioned pieces cut from it with coordinate tags (`X`, `Y`) and piece numbers (packed at their 603 × 903 mm cutting size).
      - Sheet utilization percentage and leftover offcut area.
 
 ---
@@ -177,6 +181,7 @@ graph TD
      - Customer Name: `Ahmed Interior Decorators`
      - Product Name: `5 mm Clear Glass`
      - Sizing: Dual readout, e.g. `600 × 900 mm (1'11⅝" × 2'11⁷/₁₆")`
+     - **Polished Piece Indication:** For polished items, the label displays a bold `[POLISHED]` badge and details both finished size and raw cut size: `600 × 900 mm · Cut: 603 × 903 mm [POLISHED]`.
 4. The system triggers the native Android print dialog or allows sharing the PDF directly via WhatsApp or cloud storage.
 
 ---
