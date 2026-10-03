@@ -126,3 +126,39 @@ export function friendlyStockError(message: string): string {
   }
   return message;
 }
+
+/** Calculate area in square feet from integer mm dimensions. */
+export function calculateAreaSqFt(widthMm: number, heightMm: number): number {
+  if (widthMm <= 0 || heightMm <= 0) return 0;
+  return Number(((widthMm * heightMm) / 92903.04).toFixed(2));
+}
+
+/** Calculate area in square metres from integer mm dimensions. */
+export function calculateAreaSqM(widthMm: number, heightMm: number): number {
+  if (widthMm <= 0 || heightMm <= 0) return 0;
+  return Number(((widthMm * heightMm) / 1000000).toFixed(2));
+}
+
+/** Returns orientation and ratio info for given dimensions. */
+export function getAspectRatioInfo(widthMm: number, heightMm: number): {
+  orientation: 'Portrait' | 'Landscape' | 'Square';
+  ratioText: string;
+} {
+  if (widthMm <= 0 || heightMm <= 0) {
+    return { orientation: 'Square', ratioText: '1 : 1' };
+  }
+  if (widthMm === heightMm) {
+    return { orientation: 'Square', ratioText: '1 : 1' };
+  }
+  if (widthMm > heightMm) {
+    return {
+      orientation: 'Landscape',
+      ratioText: `${(widthMm / heightMm).toFixed(2)} : 1`,
+    };
+  }
+  return {
+    orientation: 'Portrait',
+    ratioText: `1 : ${(heightMm / widthMm).toFixed(2)}`,
+  };
+}
+

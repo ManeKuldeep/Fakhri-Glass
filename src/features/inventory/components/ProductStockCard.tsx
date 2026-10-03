@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { formatMm, formatFtIn } from '../utils';
 import { useRemoveStock } from '../mutations';
 import type { StockItemWithProduct } from '../queries';
+import { OffcutThumbnail, OffcutInspectionModal } from './OffcutVisualizer';
 
 export interface ProductStockGroup {
   productId: string;
@@ -51,6 +52,8 @@ export default function ProductStockCard({
 
   // Track draft quantity to remove for each size cluster
   const [removeQuantities, setRemoveQuantities] = useState<Record<string, string>>({});
+  // Track cluster selected for detailed visual inspection
+  const [inspectCluster, setInspectCluster] = useState<SizeCluster | null>(null);
 
   // Group items by dimensions + source within this product
   const sizeClusters = useMemo(() => {
@@ -204,19 +207,30 @@ export default function ProductStockCard({
             return (
               <View key={cluster.key} style={styles.sizeCard}>
                 <View style={styles.sizeCardTop}>
-                  <View style={styles.sizeInfo}>
-                    <Text style={styles.sizeDimensions}>{dims}</Text>
-                    <View style={styles.sizeMetaRow}>
-                      <View style={[styles.sourceBadge, { backgroundColor: sourceBg }]}>
-                        <Text style={[styles.sourceBadgeText, { color: sourceColor }]}>
-                          {isFull ? 'Full Sheet' : 'Offcut'}
-                        </Text>
+                  <View style={styles.sizeCardTopLeft}>
+                    <OffcutThumbnail
+                      widthMm={cluster.widthMm}
+                      heightMm={cluster.heightMm}
+                      source={cluster.source}
+                      isLining={product.is_lining}
+                      maxWidth={56}
+                      maxHeight={42}
+                      onPress={() => setInspectCluster(cluster)}
+                    />
+                    <View style={styles.sizeInfo}>
+                      <Text style={styles.sizeDimensions}>{dims}</Text>
+                      <View style={styles.sizeMetaRow}>
+                        <View style={[styles.sourceBadge, { backgroundColor: sourceBg }]}>
+                          <Text style={[styles.sourceBadgeText, { color: sourceColor }]}>
+                            {isFull ? 'Full Sheet' : 'Offcut'}
+                          </Text>
+                        </View>
+                        {cluster.verticalLineHeightMm != null ? (
+                          <Text style={styles.lineHeightText}>
+                            Line: {dimFormat(cluster.verticalLineHeightMm)}
+                          </Text>
+                        ) : null}
                       </View>
-                      {cluster.verticalLineHeightMm != null ? (
-                        <Text style={styles.lineHeightText}>
-                          Line: {dimFormat(cluster.verticalLineHeightMm)}
-                        </Text>
-                      ) : null}
                     </View>
                   </View>
 
@@ -230,6 +244,17 @@ export default function ProductStockCard({
 
                 {/* Actions for this size cluster */}
                 <View style={styles.clusterActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      pressed && styles.actionBtnPressed,
+                    ]}
+                    onPress={() => setInspectCluster(cluster)}
+                  >
+                    <MaterialCommunityIcons name="eye-outline" size={15} color="#4F46E5" />
+                    <Text style={styles.actionTextInspect}>Visualize</Text>
+                  </Pressable>
+
                   <Pressable
                     style={({ pressed }) => [
                       styles.actionBtn,
@@ -290,9 +315,28 @@ export default function ProductStockCard({
           })}
         </View>
       ) : null}
+
+      {inspectCluster && (
+        <OffcutInspectionModal
+          visible={!!inspectCluster}
+          onClose={() => setInspectCluster(null)}
+          title={product.name}
+          categoryName={product.category.name}
+          thicknessMm={product.thickness_mm}
+          color={product.color}
+          widthMm={inspectCluster.widthMm}
+          heightMm={inspectCluster.heightMm}
+          source={inspectCluster.source}
+          isLining={product.is_lining}
+          verticalLineHeightMm={inspectCluster.verticalLineHeightMm}
+          quantity={inspectCluster.count}
+          showFtIn={showFtIn}
+        />
+      )}
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   card: {
@@ -393,6 +437,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
+  sizeCardTopLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    paddingRight: 8,
+  },
   sizeInfo: {
     flex: 1,
   },
@@ -462,6 +513,11 @@ const styles = StyleSheet.create({
   },
   actionBtnPressed: {
     opacity: 0.7,
+  },
+  actionTextInspect: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4F46E5',
   },
   actionTextEdit: {
     fontSize: 12,

@@ -5,6 +5,9 @@ import {
   ftInToMm,
   parseDimensionInput,
   friendlyStockError,
+  calculateAreaSqFt,
+  calculateAreaSqM,
+  getAspectRatioInfo,
 } from '../utils';
 
 describe('ftInToMm', () => {
@@ -111,3 +114,45 @@ describe('friendlyStockError', () => {
     expect(friendlyStockError('some other error')).toBe('some other error');
   });
 });
+
+describe('calculateAreaSqFt and calculateAreaSqM', () => {
+  it('calculates area for 2440 × 1830 mm standard sheet (~48 sq ft, ~4.47 m²)', () => {
+    const sqFt = calculateAreaSqFt(2440, 1830);
+    const sqM = calculateAreaSqM(2440, 1830);
+    expect(sqFt).toBeCloseTo(48.06, 1);
+    expect(sqM).toBe(4.47);
+  });
+
+  it('calculates area for an offcut 600 × 900 mm (~5.81 sq ft, 0.54 m²)', () => {
+    const sqFt = calculateAreaSqFt(600, 900);
+    const sqM = calculateAreaSqM(600, 900);
+    expect(sqFt).toBe(5.81);
+    expect(sqM).toBe(0.54);
+  });
+
+  it('returns 0 for non-positive dimensions', () => {
+    expect(calculateAreaSqFt(0, 1000)).toBe(0);
+    expect(calculateAreaSqM(1000, -10)).toBe(0);
+  });
+});
+
+describe('getAspectRatioInfo', () => {
+  it('identifies portrait orientation correctly', () => {
+    const info = getAspectRatioInfo(600, 900);
+    expect(info.orientation).toBe('Portrait');
+    expect(info.ratioText).toBe('1 : 1.50');
+  });
+
+  it('identifies landscape orientation correctly', () => {
+    const info = getAspectRatioInfo(1200, 600);
+    expect(info.orientation).toBe('Landscape');
+    expect(info.ratioText).toBe('2.00 : 1');
+  });
+
+  it('identifies square pieces correctly', () => {
+    const info = getAspectRatioInfo(800, 800);
+    expect(info.orientation).toBe('Square');
+    expect(info.ratioText).toBe('1 : 1');
+  });
+});
+

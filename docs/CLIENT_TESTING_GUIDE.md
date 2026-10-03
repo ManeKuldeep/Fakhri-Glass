@@ -62,8 +62,16 @@ graph TD
      - Enter Line Height: `1830 mm` $\rightarrow$ Tap **Add Stock**.
 4. **Dimension Toggle:**
    - Tap the **"mm / ft-in"** toggle at the top of the inventory screen to verify dimensions convert accurately between millimetres and feet/inches (`2440 mm` $\leftrightarrow$ `8' 0"`).
+5. **Sheet & Offcut Visualizer:**
+   - Notice the proportional visual thumbnail next to each stock size/offcut.
+   - For Figured Glass (`is_lining`), observe the vertical texture flutes drawn across the preview indicating grain direction.
+   - Tap on the thumbnail or the **"Visualize"** button to open the detailed visualizer:
+     - Review the scaled piece with dimension callouts.
+     - Toggle **"Compare Full Sheet"** to visually see how the offcut fits inside a standard 8' × 6' (2440 × 1830 mm) full sheet.
+     - View exact surface area in **sq. ft** and **m²**, plus aspect ratio and orientation.
 
 ---
+
 
 ### Step 3: Booking a Customer Order
 1. Switch to the **Orders** tab.
@@ -96,8 +104,15 @@ graph TD
 8. **WhatsApp Share:**
    - Tap the created order to open the **Order Detail** screen.
    - Tap **"Send to WhatsApp"**: Opens WhatsApp with a pre-formatted message listing the store, customer name, line items with dimensions, total, and balance due.
+9. **Order Visualizers:**
+   - **Piece Inspection:** In the items list, notice the mini visual thumbnail next to each item. Tap any piece thumbnail to inspect its proportional aspect ratio, area (sq. ft and m²), and texture orientation.
+   - **Main Sheet Cut Layout:** Once an order's cut plan is confirmed by the cutter, a green **"Main Sheet Cut Layout"** card appears in the Order Detail screen. Tap **"Visualize Sheet Cuts"** to see:
+     - The physical parent sheet (full sheet or offcut) drawn to scale.
+     - The exact positioned pieces cut from it with coordinate tags (`X`, `Y`) and piece numbers.
+     - Sheet utilization percentage and leftover offcut area.
 
 ---
+
 
 ### Step 4: Cutter Queue
 1. Log out (Settings $\rightarrow$ Log out) and log in as **Hussain** (`hussain@...`), or tap directly on the **Cut** tab.

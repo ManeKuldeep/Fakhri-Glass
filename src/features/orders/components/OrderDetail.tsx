@@ -10,10 +10,12 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useOrderDetail } from '../queries';
+import { useOrderDetail, useOrderCutPlans } from '../queries';
 import { formatMm, formatFtIn } from '../../inventory/utils';
 import { useState } from 'react';
 import { printOrderLabels } from '../../labels/services';
+import { OffcutThumbnail, OffcutInspectionModal } from '../../inventory/components/OffcutVisualizer';
+import OrderCutVisualizerModal from './OrderCutVisualizerModal';
 
 interface OrderDetailProps {
   visible: boolean;
@@ -23,8 +25,20 @@ interface OrderDetailProps {
 
 export default function OrderDetail({ visible, onClose, orderId }: OrderDetailProps) {
   const { data: order, isLoading, error } = useOrderDetail(orderId ?? '');
+  const { data: cutPlans } = useOrderCutPlans(orderId ?? '');
   const [showFtIn, setShowFtIn] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [showCutVisualizer, setShowCutVisualizer] = useState(false);
+  const [inspectPiece, setInspectPiece] = useState<{
+    widthMm: number;
+    heightMm: number;
+    title: string;
+    categoryName: string;
+    thicknessMm: number;
+    color?: string | null;
+    isLining: boolean;
+    quantity: number;
+  } | null>(null);
   const dimFormat = showFtIn ? formatFtIn : formatMm;
 
   async function handlePrintLabels(sharePdf = false) {
@@ -186,23 +200,75 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
 
             {order.order_items.map((item) => (
               <View key={item.id} style={styles.itemCard}>
-                <View style={styles.itemHeader}>
-                  <Text style={styles.itemName}>{item.product.name}</Text>
-                  <Text style={styles.itemCategory}>
-                    {item.product.category.name} · {item.product.thickness_mm}mm
-                  </Text>
-                </View>
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemDetail}>
-                    {dimFormat(item.width_mm)} × {dimFormat(item.height_mm)}
-                  </Text>
-                  <Text style={styles.itemDetail}>Qty: {item.qty}</Text>
-                  <Text style={styles.itemDetail}>
-                    ₹{item.unit_price.toLocaleString('en-IN')} × {item.qty} = ₹{item.line_total.toLocaleString('en-IN')}
-                  </Text>
+                <View style={styles.itemCardRow}>
+                  <OffcutThumbnail
+                    widthMm={item.width_mm}
+                    heightMm={item.height_mm}
+                    source="full"
+                    isLining={item.product.is_lining ?? false}
+                    maxWidth={56}
+                    maxHeight={42}
+                    onPress={() =>
+                      setInspectPiece({
+                        widthMm: item.width_mm,
+                        heightMm: item.height_mm,
+                        title: item.product.name,
+                        categoryName: item.product.category.name,
+                        thicknessMm: item.product.thickness_mm,
+                        color: item.product.color,
+                        isLining: item.product.is_lining ?? false,
+                        quantity: item.qty,
+                      })
+                    }
+                  />
+                  <View style={styles.itemMainInfo}>
+                    <View style={styles.itemHeader}>
+                      <Text style={styles.itemName}>{item.product.name}</Text>
+                      <Text style={styles.itemCategory}>
+                        {item.product.category.name} · {item.product.thickness_mm}mm
+                      </Text>
+                    </View>
+                    <View style={styles.itemDetails}>
+                      <Text style={styles.itemDetail}>
+                        {dimFormat(item.width_mm)} × {dimFormat(item.height_mm)}
+                      </Text>
+                      <Text style={styles.itemDetail}>Qty: {item.qty}</Text>
+                      <Text style={styles.itemDetail}>
+                        ₹{item.unit_price.toLocaleString('en-IN')} × {item.qty} = ₹{item.line_total.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             ))}
+
+            {/* Cut Layout Section (when order has confirmed cut plans) */}
+            {cutPlans && cutPlans.length > 0 && (
+              <View style={styles.cutPlanSectionCard}>
+                <View style={styles.cutPlanHeader}>
+                  <View style={styles.cutPlanIconBox}>
+                    <MaterialCommunityIcons name="content-cut" size={20} color="#059669" />
+                  </View>
+                  <View style={styles.cutPlanHeaderText}>
+                    <Text style={styles.cutPlanTitle}>Main Sheet Cut Layout</Text>
+                    <Text style={styles.cutPlanSubtitle}>
+                      {cutPlans.reduce((sum, p) => sum + p.cut_pieces.length, 0)} piece(s) cut across {cutPlans.length} plan(s)
+                    </Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.viewCutLayoutBtn,
+                    pressed && styles.viewCutLayoutBtnPressed,
+                  ]}
+                  onPress={() => setShowCutVisualizer(true)}
+                >
+                  <MaterialCommunityIcons name="eye-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.viewCutLayoutBtnText}>Visualize Sheet Cuts</Text>
+                </Pressable>
+              </View>
+            )}
 
             {/* Piece Labels Section */}
             <View style={styles.labelsCard}>
@@ -261,8 +327,37 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
             </Text>
           </ScrollView>
         ) : null}
+
+        {inspectPiece && (
+          <OffcutInspectionModal
+            visible={!!inspectPiece}
+            onClose={() => setInspectPiece(null)}
+            title={inspectPiece.title}
+            categoryName={inspectPiece.categoryName}
+            thicknessMm={inspectPiece.thicknessMm}
+            color={inspectPiece.color}
+            widthMm={inspectPiece.widthMm}
+            heightMm={inspectPiece.heightMm}
+            source="full"
+            isLining={inspectPiece.isLining}
+            quantity={inspectPiece.quantity}
+            showFtIn={showFtIn}
+          />
+        )}
+
+        {order && cutPlans && cutPlans.length > 0 && (
+          <OrderCutVisualizerModal
+            visible={showCutVisualizer}
+            onClose={() => setShowCutVisualizer(false)}
+            orderNo={order.order_no}
+            customerName={order.customer.name}
+            plans={cutPlans}
+            showFtIn={showFtIn}
+          />
+        )}
       </View>
     </Modal>
+
   );
 }
 
@@ -387,6 +482,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
+  itemCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  itemMainInfo: {
+    flex: 1,
+  },
   itemHeader: { marginBottom: 6 },
   itemName: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
   itemCategory: { fontSize: 12, color: '#64748B', marginTop: 2 },
@@ -486,4 +589,57 @@ const styles = StyleSheet.create({
   btnDisabled: {
     opacity: 0.6,
   },
+  cutPlanSectionCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  cutPlanHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  cutPlanIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cutPlanHeaderText: {
+    flex: 1,
+  },
+  cutPlanTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  cutPlanSubtitle: {
+    fontSize: 12,
+    color: '#047857',
+    marginTop: 2,
+  },
+  viewCutLayoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+  viewCutLayoutBtnPressed: {
+    backgroundColor: '#047857',
+  },
+  viewCutLayoutBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });
+

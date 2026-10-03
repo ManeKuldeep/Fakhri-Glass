@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { formatMm, formatFtIn } from '../utils';
 import { useRemoveStock } from '../mutations';
+import { OffcutThumbnail, OffcutInspectionModal } from './OffcutVisualizer';
 
 interface ProductInfo {
   id: string;
@@ -30,6 +32,7 @@ interface StockItemCardProps {
 
 export default function StockItemCard({ item, showFtIn, onEdit }: StockItemCardProps) {
   const removeStock = useRemoveStock();
+  const [isInspecting, setIsInspecting] = useState(false);
   const { product } = item;
 
   const dimFormat = showFtIn ? formatFtIn : formatMm;
@@ -59,9 +62,20 @@ export default function StockItemCard({ item, showFtIn, onEdit }: StockItemCardP
     <View style={styles.card}>
       {/* Header row */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.productName}>{product.name}</Text>
-          <Text style={styles.categoryName}>{product.category.name}</Text>
+        <View style={styles.headerLeftRow}>
+          <OffcutThumbnail
+            widthMm={item.width_mm}
+            heightMm={item.height_mm}
+            source={item.source as 'full' | 'offcut'}
+            isLining={product.is_lining}
+            maxWidth={54}
+            maxHeight={40}
+            onPress={() => setIsInspecting(true)}
+          />
+          <View style={styles.headerLeft}>
+            <Text style={styles.productName}>{product.name}</Text>
+            <Text style={styles.categoryName}>{product.category.name}</Text>
+          </View>
         </View>
         <View style={[styles.badge, { backgroundColor: sourceColor + '18' }]}>
           <Text style={[styles.badgeText, { color: sourceColor }]}>{sourceLabel}</Text>
@@ -92,6 +106,13 @@ export default function StockItemCard({ item, showFtIn, onEdit }: StockItemCardP
       <View style={styles.actions}>
         <Pressable
           style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+          onPress={() => setIsInspecting(true)}
+        >
+          <MaterialCommunityIcons name="eye-outline" size={16} color="#4F46E5" />
+          <Text style={styles.actionTextInspect}>Visualize</Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
           onPress={() => onEdit(item.id)}
         >
           <MaterialCommunityIcons name="pencil-outline" size={16} color="#1A73E8" />
@@ -106,9 +127,26 @@ export default function StockItemCard({ item, showFtIn, onEdit }: StockItemCardP
           <Text style={styles.actionTextRemove}>Remove</Text>
         </Pressable>
       </View>
+
+      <OffcutInspectionModal
+        visible={isInspecting}
+        onClose={() => setIsInspecting(false)}
+        title={product.name}
+        categoryName={product.category.name}
+        thicknessMm={product.thickness_mm}
+        color={product.color}
+        widthMm={item.width_mm}
+        heightMm={item.height_mm}
+        source={item.source as 'full' | 'offcut'}
+        isLining={product.is_lining}
+        verticalLineHeightMm={item.vertical_line_height_mm}
+        quantity={1}
+        showFtIn={showFtIn}
+      />
     </View>
   );
 }
+
 
 function DetailRow({
   icon,
@@ -147,9 +185,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 10,
   },
+  headerLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    paddingRight: 8,
+  },
   headerLeft: {
     flex: 1,
-    marginRight: 8,
   },
   productName: {
     fontSize: 16,
@@ -196,6 +240,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
     paddingTop: 10,
+    alignItems: 'center',
   },
   actionBtn: {
     flexDirection: 'row',
@@ -207,6 +252,11 @@ const styles = StyleSheet.create({
   },
   actionBtnPressed: {
     backgroundColor: '#F1F5F9',
+  },
+  actionTextInspect: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4F46E5',
   },
   actionTextEdit: {
     fontSize: 13,

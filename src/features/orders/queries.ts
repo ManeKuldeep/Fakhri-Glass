@@ -8,6 +8,7 @@ export const orderKeys = {
   list: (filters: OrderListFilters) =>
     [...orderKeys.all, 'list', filters] as const,
   detail: (id: string) => [...orderKeys.all, 'detail', id] as const,
+  cutPlans: (orderId: string) => [...orderKeys.all, 'cutPlans', orderId] as const,
   customerSearch: (name: string) =>
     [...orderKeys.all, 'customerSearch', name] as const,
   customerByPhone: (phone: string) =>
@@ -19,6 +20,41 @@ export const orderKeys = {
 export interface OrderListFilters {
   store?: string;
   status?: string;
+}
+
+export interface OrderCutPiece {
+  id: string;
+  order_item_id: string;
+  stock_item_id: string;
+  x_mm: number;
+  y_mm: number;
+  w_mm: number;
+  h_mm: number;
+  rotated: boolean;
+  stock_item: {
+    id: string;
+    width_mm: number;
+    height_mm: number;
+    source: string;
+    vertical_line_height_mm: number | null;
+  } | null;
+}
+
+export interface OrderCutPlan {
+  id: string;
+  order_id: string;
+  product_id: string;
+  kerf_mm: number;
+  max_wastage_pct: number | null;
+  created_at: string;
+  product: {
+    id: string;
+    name: string;
+    thickness_mm: number;
+    color: string | null;
+    is_lining: boolean;
+  } | null;
+  cut_pieces: OrderCutPiece[];
 }
 
 // ─── Fetch functions ─────────────────────────────────────────────────────────
@@ -91,6 +127,7 @@ async function fetchOrderDetail(id: string) {
           name,
           thickness_mm,
           color,
+          is_lining,
           category:categories!inner (
             name
           )
@@ -169,3 +206,55 @@ export function useCustomerByPhone(phone: string) {
     staleTime: 30_000,
   });
 }
+
+async function fetchOrderCutPlans(orderId: string) {
+  return supabase
+    .from('cut_plans')
+    .select(`
+      id,
+      order_id,
+      product_id,
+      kerf_mm,
+      max_wastage_pct,
+      created_at,
+      product:products (
+        id,
+        name,
+        thickness_mm,
+        color,
+        is_lining
+      ),
+      cut_pieces (
+        id,
+        order_item_id,
+        stock_item_id,
+        x_mm,
+        y_mm,
+        w_mm,
+        h_mm,
+        rotated,
+        stock_item:stock_items (
+          id,
+          width_mm,
+          height_mm,
+          source,
+          vertical_line_height_mm
+        )
+      )
+    `)
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true });
+}
+
+export function useOrderCutPlans(orderId: string) {
+  return useQuery({
+    queryKey: orderKeys.cutPlans(orderId),
+    queryFn: async () => {
+      const { data, error } = await fetchOrderCutPlans(orderId);
+      if (error) throw new Error(error.message);
+      return data as unknown as OrderCutPlan[];
+    },
+    enabled: !!orderId,
+  });
+}
+
