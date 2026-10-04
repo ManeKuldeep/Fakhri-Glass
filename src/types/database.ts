@@ -648,6 +648,7 @@ export type Database = {
     }
     Functions: {
       auth_shop_id: { Args: never; Returns: string }
+      cancel_order: { Args: { p_order_id: string }; Returns: Json }
       confirm_cut_plan: {
         Args: {
           p_kerf_mm: number
@@ -673,6 +674,21 @@ export type Database = {
         }[]
       }
       log_event: { Args: { p_summary: string }; Returns: undefined }
+      update_order_with_items: {
+        Args: {
+          p_customer_id: string
+          p_items?: Json
+          p_notes?: string
+          p_order_id: string
+          p_paid?: number
+          p_payment_method?: string
+          p_store: string
+        }
+        Returns: {
+          id: string
+          order_no: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

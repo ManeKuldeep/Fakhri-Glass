@@ -20,6 +20,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   cutting: { bg: '#FEF3C7', text: '#D97706' },
   cut: { bg: '#D1FAE5', text: '#059669' },
   delivered: { bg: '#E0E7FF', text: '#4338CA' },
+  cancelled: { bg: '#FEE2E2', text: '#DC2626' },
 };
 
 function formatDate(iso: string): string {

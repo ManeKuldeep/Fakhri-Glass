@@ -14,8 +14,10 @@ import { useOrderDetail, useOrderCutPlans } from '../queries';
 import { formatMm, formatFtIn } from '../../inventory/utils';
 import { useState } from 'react';
 import { printOrderLabels } from '../../labels/services';
+import { useCancelOrder } from '../mutations';
 import { OffcutThumbnail, OffcutInspectionModal } from '../../inventory/components/OffcutVisualizer';
 import OrderCutVisualizerModal from './OrderCutVisualizerModal';
+import EditOrderModal from './EditOrderModal';
 
 interface OrderDetailProps {
   visible: boolean;
@@ -26,6 +28,8 @@ interface OrderDetailProps {
 export default function OrderDetail({ visible, onClose, orderId }: OrderDetailProps) {
   const { data: order, isLoading, error } = useOrderDetail(orderId ?? '');
   const { data: cutPlans } = useOrderCutPlans(orderId ?? '');
+  const cancelOrder = useCancelOrder();
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showFtIn, setShowFtIn] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [showCutVisualizer, setShowCutVisualizer] = useState(false);
@@ -40,6 +44,32 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
     quantity: number;
   } | null>(null);
   const dimFormat = showFtIn ? formatFtIn : formatMm;
+
+  function handleCancelOrder() {
+    if (!order) return;
+
+    const hasCutPlans = order.status === 'cutting' || order.status === 'cut';
+    const message = hasCutPlans
+      ? `Order #${order.order_no} has active cut plans. Cancelling will revert cut sheets back to available stock and remove generated offcuts.\n\nAre you sure you want to cancel this order?`
+      : `Are you sure you want to cancel Order #${order.order_no}? It will be marked as Cancelled.`;
+
+    Alert.alert(`Cancel Order #${order.order_no}?`, message, [
+      { text: 'No, Keep Order', style: 'cancel' },
+      {
+        text: 'Yes, Cancel Order',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await cancelOrder.mutateAsync(order.id);
+            Alert.alert('Order Cancelled', `Order #${order.order_no} has been marked as cancelled.`);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            Alert.alert('Cancellation Failed', msg);
+          }
+        },
+      },
+    ]);
+  }
 
   async function handlePrintLabels(sharePdf = false) {
     if (!order) return;
@@ -138,13 +168,48 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
           >
-            {/* Status + Store */}
+            {/* Status + Store + Actions */}
             <View style={styles.topRow}>
-              <StatusBadge status={order.status} />
-              <Text style={styles.storeText}>
-                {order.store === 'mumbai' ? 'Mumbai' : 'Sanpada'}
-              </Text>
+              <View style={styles.statusStoreBox}>
+                <StatusBadge status={order.status} />
+                <Text style={styles.storeText}>
+                  {order.store === 'mumbai' ? 'Mumbai' : 'Sanpada'}
+                </Text>
+              </View>
+
+              <View style={styles.orderActionsRow}>
+                <Pressable
+                  style={styles.editOrderBtn}
+                  onPress={() => setShowEditModal(true)}
+                  hitSlop={8}
+                >
+                  <MaterialCommunityIcons name="pencil-outline" size={15} color="#1A73E8" />
+                  <Text style={styles.editOrderBtnText}>Edit</Text>
+                </Pressable>
+
+                {order.status !== 'cancelled' ? (
+                  <Pressable
+                    style={styles.cancelOrderBtn}
+                    onPress={handleCancelOrder}
+                    disabled={cancelOrder.isPending}
+                    hitSlop={8}
+                  >
+                    <MaterialCommunityIcons name="close-circle-outline" size={15} color="#DC2626" />
+                    <Text style={styles.cancelOrderBtnText}>Cancel</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
+
+            {/* Cancelled Banner */}
+            {order.status === 'cancelled' ? (
+              <View style={styles.cancelledBanner}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#DC2626" />
+                <Text style={styles.cancelledBannerText}>
+                  This order was cancelled. Tap "Edit" to modify items or reopen into New status.
+                </Text>
+              </View>
+            ) : null}
 
             {/* Customer info */}
             <SectionCard title="Customer">
@@ -156,16 +221,18 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
                 <InfoRow icon="map-marker-outline" label="Address" value={order.customer.address} />
               ) : null}
 
-              <Pressable
-                style={({ pressed }) => [
-                  styles.whatsappBtn,
-                  pressed && styles.whatsappBtnPressed,
-                ]}
-                onPress={handleSendWhatsApp}
-              >
-                <MaterialCommunityIcons name="whatsapp" size={18} color="#FFFFFF" />
-                <Text style={styles.whatsappBtnText}>Send to WhatsApp</Text>
-              </Pressable>
+              {order.status !== 'cancelled' ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.whatsappBtn,
+                    pressed && styles.whatsappBtnPressed,
+                  ]}
+                  onPress={handleSendWhatsApp}
+                >
+                  <MaterialCommunityIcons name="whatsapp" size={18} color="#FFFFFF" />
+                  <Text style={styles.whatsappBtnText}>Send to WhatsApp</Text>
+                </Pressable>
+              ) : null}
             </SectionCard>
 
             {/* Order info */}
@@ -283,49 +350,51 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
             )}
 
             {/* Piece Labels Section */}
-            <View style={styles.labelsCard}>
-              <View style={styles.labelsCardHeader}>
-                <MaterialCommunityIcons name="label-outline" size={20} color="#1A73E8" />
-                <Text style={styles.labelsCardTitle}>Piece Labels</Text>
-              </View>
-              <Text style={styles.labelsCardSubtitle}>
-                Generate 100×50 mm thermal labels (one label per physical piece).
-              </Text>
+            {order.status !== 'cancelled' ? (
+              <View style={styles.labelsCard}>
+                <View style={styles.labelsCardHeader}>
+                  <MaterialCommunityIcons name="label-outline" size={20} color="#1A73E8" />
+                  <Text style={styles.labelsCardTitle}>Piece Labels</Text>
+                </View>
+                <Text style={styles.labelsCardSubtitle}>
+                  Generate 100×50 mm thermal labels (one label per physical piece).
+                </Text>
 
-              <View style={styles.labelButtonsRow}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.printLabelsBtn,
-                    pressed && styles.printLabelsBtnPressed,
-                    isPrinting && styles.btnDisabled,
-                  ]}
-                  onPress={() => handlePrintLabels(false)}
-                  disabled={isPrinting}
-                >
-                  {isPrinting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <MaterialCommunityIcons name="printer" size={18} color="#FFFFFF" />
-                      <Text style={styles.printLabelsBtnText}>Print Labels</Text>
-                    </>
-                  )}
-                </Pressable>
+                <View style={styles.labelButtonsRow}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.printLabelsBtn,
+                      pressed && styles.printLabelsBtnPressed,
+                      isPrinting && styles.btnDisabled,
+                    ]}
+                    onPress={() => handlePrintLabels(false)}
+                    disabled={isPrinting}
+                  >
+                    {isPrinting ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="printer" size={18} color="#FFFFFF" />
+                        <Text style={styles.printLabelsBtnText}>Print Labels</Text>
+                      </>
+                    )}
+                  </Pressable>
 
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.shareLabelsBtn,
-                    pressed && styles.shareLabelsBtnPressed,
-                    isPrinting && styles.btnDisabled,
-                  ]}
-                  onPress={() => handlePrintLabels(true)}
-                  disabled={isPrinting}
-                >
-                  <MaterialCommunityIcons name="share-variant-outline" size={18} color="#1A73E8" />
-                  <Text style={styles.shareLabelsBtnText}>Share PDF</Text>
-                </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.shareLabelsBtn,
+                      pressed && styles.shareLabelsBtnPressed,
+                      isPrinting && styles.btnDisabled,
+                    ]}
+                    onPress={() => handlePrintLabels(true)}
+                    disabled={isPrinting}
+                  >
+                    <MaterialCommunityIcons name="share-variant-outline" size={18} color="#1A73E8" />
+                    <Text style={styles.shareLabelsBtnText}>Share PDF</Text>
+                  </Pressable>
+                </View>
               </View>
-            </View>
+            ) : null}
 
             {/* Created date */}
             <Text style={styles.createdAt}>
@@ -367,9 +436,16 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
             showFtIn={showFtIn}
           />
         )}
+
+        {order && (
+          <EditOrderModal
+            visible={showEditModal}
+            order={order}
+            onClose={() => setShowEditModal(false)}
+          />
+        )}
       </View>
     </Modal>
-
   );
 }
 
@@ -381,6 +457,7 @@ function StatusBadge({ status }: { status: string }) {
     cutting: { bg: '#FEF3C7', text: '#D97706' },
     cut: { bg: '#D1FAE5', text: '#059669' },
     delivered: { bg: '#E0E7FF', text: '#4338CA' },
+    cancelled: { bg: '#FEE2E2', text: '#DC2626' },
   };
   const c = colors[status] ?? { bg: '#F1F5F9', text: '#475569' };
   return (
@@ -442,6 +519,66 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  statusStoreBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  orderActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  editOrderBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1A73E8',
+  },
+  cancelOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  cancelOrderBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  cancelledBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 14,
+  },
+  cancelledBannerText: {
+    fontSize: 13,
+    color: '#991B1B',
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 18,
   },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   badgeText: { fontSize: 13, fontWeight: '600' },

@@ -14,6 +14,7 @@ export const ORDER_STATUSES = [
   { value: 'cutting', label: 'Cutting' },
   { value: 'cut', label: 'Cut' },
   { value: 'delivered', label: 'Delivered' },
+  { value: 'cancelled', label: 'Cancelled' },
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUSES)[number]['value'];

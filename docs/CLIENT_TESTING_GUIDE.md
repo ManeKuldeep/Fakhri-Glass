@@ -114,6 +114,9 @@ graph TD
      - The physical parent sheet (full sheet or offcut) drawn to scale.
      - The exact positioned pieces cut from it with coordinate tags (`X`, `Y`) and piece numbers (packed at their 603 × 903 mm cutting size).
      - Sheet utilization percentage and leftover offcut area.
+10. **Editing & Cancelling an Order:**
+    - **Edit Order:** Tap the **"Edit"** button in the Order Detail header to open the Edit Order modal. You can modify customer details, store, notes, payment, or any line item (dimensions, quantities, prices, or edge finish). If the order already had confirmed cut plans, saving changes safely reverts previous glass deductions and returns the order to `New` status for recutting.
+    - **Cancel Order (Soft Delete):** Tap the **"Cancel"** button. A confirmation dialog appears. Upon confirming, the order transitions to **`Cancelled`** status, any active cut plans are deleted, and consumed sheets are safely restored back to available inventory.
 
 ---
 

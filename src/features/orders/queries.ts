@@ -130,6 +130,7 @@ async function fetchOrderDetail(id: string) {
           color,
           is_lining,
           category:categories!inner (
+            id,
             name
           )
         )
@@ -139,6 +140,8 @@ async function fetchOrderDetail(id: string) {
     .eq('id', id)
     .single();
 }
+
+export type OrderDetailData = NonNullable<Awaited<ReturnType<typeof fetchOrderDetail>>['data']>;
 
 async function fetchCustomerByPhone(phone: string) {
   return supabase
