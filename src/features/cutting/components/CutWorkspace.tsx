@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { packPieces } from '../../../optimizer/pack';
 import { piecesOverlap, isUsableOffcut } from '../../../optimizer/validation';
 import { ResultOffcut, WastedRect, KerfCut } from '../../../optimizer/types';
@@ -34,6 +35,7 @@ interface CutWorkspaceProps {
 }
 
 export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
+  const insets = useSafeAreaInsets();
   const { settings } = useCuttingSettingsStore();
   const confirmMutation = useConfirmCutPlan();
 
@@ -630,10 +632,10 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
 
   return (
     <View style={styles.container}>
-      {/* Top Header */}
-      <View style={styles.header}>
+      {/* Top Header with notch/status bar spacing */}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
         <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color="#0F172A" />
+          <MaterialCommunityIcons name="arrow-left" size={22} color="#0F172A" />
         </Pressable>
 
         <View style={styles.headerTitleArea}>
@@ -803,8 +805,13 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
   backBtn: {
-    padding: 6,
-    marginRight: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
   headerTitleArea: {
     flex: 1,
@@ -830,9 +837,12 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   settingsBtn: {
-    padding: 8,
-    borderRadius: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statsBar: {
     flexDirection: 'row',

@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   calculateAreaSqFt,
   calculateAreaSqM,
@@ -165,6 +166,7 @@ export function OffcutInspectionModal({
   quantity = 1,
   showFtIn = false,
 }: OffcutInspectionModalProps) {
+  const insets = useSafeAreaInsets();
   const [compareWithFull, setCompareWithFull] = useState(false);
   const isOffcut = source === 'offcut';
   const themeColor = isOffcut ? '#D97706' : '#059669';
@@ -213,8 +215,11 @@ export function OffcutInspectionModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalRoot}>
-        {/* Header */}
-        <View style={styles.modalHeader}>
+        {/* Header with notch/status bar spacing */}
+        <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 16) }]}>
+          <Pressable onPress={onClose} hitSlop={12} style={styles.navBtn}>
+            <MaterialCommunityIcons name="arrow-left" size={22} color="#0F172A" />
+          </Pressable>
           <View style={styles.modalHeaderLeft}>
             <Text style={styles.modalTitle}>{title}</Text>
             <View style={styles.modalSubRow}>
@@ -228,8 +233,8 @@ export function OffcutInspectionModal({
               </Text>
             </View>
           </View>
-          <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
-            <MaterialCommunityIcons name="close" size={24} color="#64748B" />
+          <Pressable onPress={onClose} hitSlop={12} style={styles.navBtn}>
+            <MaterialCommunityIcons name="close" size={20} color="#0F172A" />
           </Pressable>
         </View>
 
@@ -502,9 +507,8 @@ const styles = StyleSheet.create({
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    alignItems: 'center',
+    paddingHorizontal: 16,
     paddingBottom: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -512,7 +516,15 @@ const styles = StyleSheet.create({
   },
   modalHeaderLeft: {
     flex: 1,
-    paddingRight: 12,
+    paddingHorizontal: 12,
+  },
+  navBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalTitle: {
     fontSize: 18,

@@ -2,12 +2,14 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useLowStock } from '../queries';
+import { useStockItems } from '../../inventory/queries';
 
 export default function LowStockBanner() {
   const router = useRouter();
-  const { data: lowStockItems, isLoading, error } = useLowStock();
+  const { data: lowStockItems, isLoading: isLowStockLoading, error } = useLowStock();
+  const { data: stockItems, isLoading: isStockLoading } = useStockItems({ status: 'available' });
 
-  if (isLoading) {
+  if (isLowStockLoading || isStockLoading) {
     return (
       <View style={[styles.card, styles.loadingCard]}>
         <ActivityIndicator size="small" color="#D97706" />
@@ -20,8 +22,33 @@ export default function LowStockBanner() {
     return null; // Don't block dashboard on low stock fetch error
   }
 
+  const totalAvailable = stockItems?.length ?? 0;
   const hasLowStock = lowStockItems && lowStockItems.length > 0;
 
+  // 1. If there is NO stock at all in the entire inventory
+  if (totalAvailable === 0) {
+    return (
+      <View style={[styles.card, styles.emptyCard]}>
+        <View style={styles.emptyIconBox}>
+          <MaterialCommunityIcons name="package-variant-closed" size={24} color="#64748B" />
+        </View>
+        <View style={styles.emptyContent}>
+          <Text style={styles.emptyTitle}>Inventory is Empty</Text>
+          <Text style={styles.emptySubtext}>
+            0 sheets in stock. Add stock to begin cutting orders.
+          </Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [styles.emptyAddBtn, pressed && styles.viewBtnPressed]}
+          onPress={() => router.push('/(tabs)/inventory')}
+        >
+          <Text style={styles.emptyAddBtnText}>+ Add</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // 2. If stock exists and no products are below their minimums
   if (!hasLowStock) {
     return (
       <View style={[styles.card, styles.healthyCard]}>
@@ -31,7 +58,7 @@ export default function LowStockBanner() {
         <View style={styles.healthyContent}>
           <Text style={styles.healthyTitle}>Stock Levels Healthy</Text>
           <Text style={styles.healthySubtext}>
-            All products with minimums meet required sheet counts
+            {totalAvailable} {totalAvailable === 1 ? 'sheet' : 'sheets'} available across inventory
           </Text>
         </View>
       </View>
@@ -105,6 +132,46 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#92400E',
     fontWeight: '500',
+  },
+  emptyCard: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EDF2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyContent: {
+    flex: 1,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 2,
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  emptyAddBtn: {
+    backgroundColor: '#1A73E8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  emptyAddBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   healthyCard: {
     backgroundColor: '#F0FDF4',

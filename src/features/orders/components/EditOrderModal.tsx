@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCategories, useProducts } from '../../inventory/queries';
 import { useUpdateOrder } from '../mutations';
 import { OrderDetailData } from '../queries';
@@ -57,6 +58,7 @@ export default function EditOrderModal({
   order,
   onClose,
 }: EditOrderModalProps) {
+  const insets = useSafeAreaInsets();
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
@@ -249,11 +251,14 @@ export default function EditOrderModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalContainer}>
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Header with notch/status bar spacing */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+          <Pressable onPress={onClose} hitSlop={12} style={styles.navBtn}>
+            <MaterialCommunityIcons name="arrow-left" size={22} color="#0F172A" />
+          </Pressable>
           <Text style={styles.title}>Edit Order #{order.order_no}</Text>
-          <Pressable onPress={onClose} hitSlop={12}>
-            <MaterialCommunityIcons name="close" size={24} color="#64748B" />
+          <Pressable onPress={onClose} hitSlop={12} style={styles.navBtn}>
+            <MaterialCommunityIcons name="close" size={20} color="#0F172A" />
           </Pressable>
         </View>
 
@@ -632,14 +637,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-  title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
+  navBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 40 },
   sectionTitle: {

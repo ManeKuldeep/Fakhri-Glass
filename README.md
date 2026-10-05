@@ -8,13 +8,14 @@ A purpose-built Android application for **Fakhri Glass** to manage retail store 
 
 1. [System Roles & Access](#1-system-roles--access)
 2. [Core Features & Workflows](#2-core-features--workflows)
-   - [Precision Dimension System (1/16" Fractions & Integer mm)](#precision-dimension-system)
+   - [Precision Dimension System (1/16 mm Fractions & Integer mm)](#precision-dimension-system)
    - [Inventory & Offcut Tracking](#inventory--offcut-tracking)
    - [Order Lifecycle & Polished Edge Finish](#order-lifecycle--polished-edge-finish)
    - [Customer Invoicing & WhatsApp Sharing](#customer-invoicing--whatsapp-sharing)
    - [2D Glass Cutting Optimizer (Skia Canvas)](#2d-glass-cutting-optimizer)
    - [Thermal Piece Labels (100 × 50 mm)](#thermal-piece-labels)
    - [Order-Grouped Activity Log](#order-grouped-activity-log)
+   - [Hardware Notch, Status Bar & Modal Navigation](#hardware-notch-status-bar--modal-navigation)
 3. [Architecture & Technology Stack](#3-architecture--technology-stack)
 4. [Android Build & Size Optimization](#4-android-build--size-optimization)
 5. [Development & Verification](#5-development--verification)
@@ -38,15 +39,17 @@ The application serves three dedicated staff profiles with shared operational vi
 ## 2. Core Features & Workflows
 
 ### Precision Dimension System
-Glass cutting requires tight tolerances and clear unit conversions:
-- **Database Storage:** All dimensions are stored strictly as whole **integer millimetres** (`mm`). Floats or decimals are never persisted to the database.
-- **Dual-Unit Input:** Input screens support switching between `mm` and `ft / in` (feet, inches, and fractions).
-- **Whole-Number mm Enforcement:** In `mm` mode, inputs accept only whole numbers (digits only).
-- **1/16" Fractional Precision:** In `in / ft` mode, users select precise 1/16" increments (`0`, `1/16"`, `1/8"`, `3/16"`, ..., `15/16"`).
-- **Smart Decimal Snapping:** If a user types a decimal point into an inch/feet input (e.g., `10.5` or `6.25`), the app automatically snaps the fractional part to the nearest 1/16" fraction (`10 8/16"` / `10 1/2"` or `6 4/16"` / `6 1/4"`), preventing rounding inconsistencies before converting to integer millimetres.
+Glass cutting requires tight tolerances and clear unit conversions with millimetres as the primary base standard:
+- **Millimetres as Base Unit:** As millimetre is the smallest unit of measurement in glass fabrication, all fine fractional calculations operate strictly on `mm`.
+- **1/16 mm Fraction Precision:** In `mm` mode, users can quickly select standard 1/16 simplified fractions (`0`, `1/16`, `1/8`, `3/16`, `1/4`, `5/16`, `3/8`, `7/16`, `1/2`, `9/16`, `5/8`, `11/16`, `3/4`, `13/16`, `7/8`, `15/16 mm`) with live calculation preview.
+- **Smart Decimal Snapping:** If a user types a decimal point into a millimetre input (e.g., `100.5` or `139.7`), the app automatically snaps the decimal to the nearest 1/16 fraction (`100 1/2 mm` or `139 11/16 mm`), eliminating decimal drift and ensuring clean, practical shop measurements.
+- **No Point Values in Displays:** Fractional millimetre points are always formatted as clean simplified fractions across all screens, cut plans, stock inspection modals, and piece labels (e.g., `100 1/2 mm` instead of `100.5 mm`).
+- **Dual-Unit Input:** Input screens support switching between `mm` (with 1/16 fraction selector) and standard `ft / in` (feet and whole inches).
+- **Database Storage Integrity:** All dimensions are stored in Supabase strictly as whole **integer millimetres** (`mm`) via rounding at the persistence boundary. Floats or raw decimals are never stored in the database.
 
 ### Inventory & Offcut Tracking
 - **Physical Sheet Tracking:** Each physical sheet or offcut corresponds to one individual row in the database. Adding quantity $N$ creates $N$ distinct stock rows.
+- **Intelligent Stock Health:** The dashboard tracks actual physical sheet counts. When inventory has zero available sheets, it immediately displays an "Inventory is Empty" banner with an instant "+ Add Stock" action rather than falsely indicating healthy levels.
 - **Figured / Lining Glass:** Products with `is_lining = true` (e.g., Moru fluted glass) require entering a **Vertical Line Height** upon creation. Flute alignment is maintained through cutting calculations.
 - **Interactive Visualizer:** Every stock item and offcut includes a proportional visual thumbnail and an inspection modal showing surface area ($\text{sq. ft}$ and $\text{m}^2$), aspect ratio, and comparison with an 8' × 6' full sheet.
 - **Soft Deletes Only:** Stock deletion marks items as `status = 'removed'`, preserving historical cutting audit trails.
@@ -85,6 +88,11 @@ Glass cutting requires tight tolerances and clear unit conversions:
 ### Order-Grouped Activity Log
 - The real-time activity log automatically aggregates multiple events related to the same order (created, cut confirmed, labels printed, delivered) into a single, clean timeline card per order.
 
+### Hardware Notch, Status Bar & Modal Navigation
+- **Device-Aware Safe Area Insets:** Wrapped in `SafeAreaProvider` with dynamic top padding (`Math.max(insets.top, 16)`), ensuring headers and controls never clip under hardware camera notches, dynamic cutouts, or status bars on any Android device.
+- **Prominent Navigation Controls:** Every modal popup and form (Add Stock, Edit Stock, Create Order, Edit Order, Order Detail, Offcut Inspector, Cut Settings) provides a prominent, high-contrast circular Back button (`arrow-left`, 38 × 38pt, `#0F172A` on `#F1F5F9`) alongside clearly visible Close buttons.
+- **Immersive Fullscreen Cutting Canvas:** The interactive cutting workspace dynamically conceals the outer tab header and bottom navigation bar, granting full screen area for glass sheet manipulation.
+
 ---
 
 ## 3. Architecture & Technology Stack
@@ -98,7 +106,7 @@ fakhri-glass/
 │   ├── features/
 │   │   ├── auth/         # Supabase session & profile assignment
 │   │   ├── cutting/      # Skia canvas, gestures, sheet visualizers
-│   │   ├── inventory/    # Stock queries, mutations, DimensionInput (1/16")
+│   │   ├── inventory/    # Stock queries, mutations, DimensionInput (1/16 mm)
 │   │   ├── orders/       # Order management, delivery, A4 invoice generator
 │   │   └── settings/     # Activity log timeline grouping & backup exports
 │   ├── hooks/            # Shared React hooks (notifications, UI)

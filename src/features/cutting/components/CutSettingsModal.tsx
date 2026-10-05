@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DimensionInput from '../../inventory/components/DimensionInput';
 import { useCuttingSettingsStore } from '../stores/cuttingSettingsStore';
 import { DEFAULT_OPTIMIZER_SETTINGS } from '../../../optimizer/types';
@@ -24,6 +25,7 @@ export default function CutSettingsModal({
   onClose,
   onApply,
 }: CutSettingsModalProps) {
+  const insets = useSafeAreaInsets();
   const { settings, updateSettings, resetSettings } = useCuttingSettingsStore();
 
   const [kerfMm, setKerfMm] = useState<number | null>(settings.kerf_mm);
@@ -71,10 +73,14 @@ export default function CutSettingsModal({
       onRequestClose={onClose}
     >
       <View style={styles.container}>
-        <View style={styles.header}>
+        {/* Header with notch/status bar spacing */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+          <Pressable onPress={onClose} hitSlop={12} style={styles.navBtn}>
+            <MaterialCommunityIcons name="arrow-left" size={22} color="#0F172A" />
+          </Pressable>
           <Text style={styles.title}>Optimizer Settings</Text>
-          <Pressable onPress={onClose} hitSlop={12}>
-            <MaterialCommunityIcons name="close" size={24} color="#64748B" />
+          <Pressable onPress={onClose} hitSlop={12} style={styles.navBtn}>
+            <MaterialCommunityIcons name="close" size={20} color="#0F172A" />
           </Pressable>
         </View>
 
@@ -148,15 +154,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingHorizontal: 16,
     paddingBottom: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
+  navBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#0F172A',
   },

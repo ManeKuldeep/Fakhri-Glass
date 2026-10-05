@@ -175,10 +175,16 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
   backBtn: {
-    padding: 4,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backBtnPressed: {
-    opacity: 0.6,
+    opacity: 0.7,
+    backgroundColor: '#E2E8F0',
   },
   headerTitle: {
     fontSize: 18,
@@ -186,7 +192,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   headerRight: {
-    width: 32,
+    width: 38,
   },
   filterRow: {
     flexDirection: 'row',
