@@ -194,3 +194,40 @@ export function useCancelOrder() {
     },
   });
 }
+
+export function useMarkOrderDelivered() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const { data: orderData, error: fetchErr } = await supabase
+        .from('orders')
+        .select('order_no')
+        .eq('id', orderId)
+        .single();
+
+      if (fetchErr) {
+        throw new Error(`Failed to fetch order: ${fetchErr.message}`);
+      }
+
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'delivered' })
+        .eq('id', orderId);
+
+      if (error) {
+        throw new Error(`Failed to mark order as delivered: ${error.message}`);
+      }
+
+      await supabase.rpc('log_event', {
+        p_summary: `Order #${orderData.order_no} marked as delivered`,
+      });
+
+      return { orderId, status: 'delivered' };
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: orderKeys.all });
+    },
+  });
+}
+

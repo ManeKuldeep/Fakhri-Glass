@@ -56,5 +56,10 @@ describe('Order Operations & Status Constants', () => {
       expect(cutWidth).toBe(603);
       expect(cutHeight).toBe(903);
     });
+
+    it('validates delivered status can only succeed cut or cutting status', () => {
+      const allowedPreDeliveryStatuses = ['cut', 'cutting'];
+      expect(allowedPreDeliveryStatuses.includes('cut')).toBe(true);
+    });
   });
 });

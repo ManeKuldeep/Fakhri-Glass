@@ -87,11 +87,11 @@ export default function CutSettingsModal({
           <View style={styles.card}>
             <DimensionInput
               label="Blade Kerf (Cut Loss)"
-              initialMm={kerfMm ?? 3}
+              initialMm={kerfMm ?? 0}
               onValueChange={setKerfMm}
             />
             <Text style={styles.helperText}>
-              Material lost per score/cut line. Default is 3 mm for glass cutter wheel allowance.
+              Material lost per score/cut line. Default is 0 mm for standard glass wheel scoring.
             </Text>
           </View>
 

@@ -84,6 +84,21 @@ describe('parseDimensionInput', () => {
     expect(parseDimensionInput('12"')).toBe(305);
   });
 
+  it('parses feet, inches and 1/16 fraction (4\' 6 3/16")', () => {
+    // 4 ft = 48 in. 48 + 6 + 3/16 = 54.1875 in = 1376.36 mm -> 1376 mm
+    expect(parseDimensionInput('4\' 6 3/16"')).toBe(1376);
+  });
+
+  it('parses inches with fraction (6 1/2")', () => {
+    // 6.5 in = 165.1 mm -> 165 mm
+    expect(parseDimensionInput('6 1/2"')).toBe(165);
+  });
+
+  it('parses standalone fraction (3/16")', () => {
+    // 3/16 in = 0.1875 in = 4.7625 mm -> 5 mm
+    expect(parseDimensionInput('3/16"')).toBe(5);
+  });
+
   it('returns null for empty string', () => {
     expect(parseDimensionInput('')).toBeNull();
   });

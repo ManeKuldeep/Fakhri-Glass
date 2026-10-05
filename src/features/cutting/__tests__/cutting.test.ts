@@ -13,9 +13,10 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
   });
 
   describe('Settings Store', () => {
-    it('initializes with default optimizer settings (3mm kerf, 500mm min offcut, 20% max wastage)', () => {
+    it('initializes with default optimizer settings (0mm kerf, 500mm min offcut, 20% max wastage)', () => {
       const settings = useCuttingSettingsStore.getState().settings;
       expect(settings.kerf_mm).toBe(DEFAULT_OPTIMIZER_SETTINGS.kerf_mm);
+      expect(settings.kerf_mm).toBe(0);
       expect(settings.min_offcut_mm).toBe(DEFAULT_OPTIMIZER_SETTINGS.min_offcut_mm);
       expect(settings.max_wastage_pct).toBe(DEFAULT_OPTIMIZER_SETTINGS.max_wastage_pct);
     });
@@ -29,7 +30,7 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
       expect(useCuttingSettingsStore.getState().settings.max_wastage_pct).toBe(20);
 
       store.resetSettings();
-      expect(useCuttingSettingsStore.getState().settings.kerf_mm).toBe(3);
+      expect(useCuttingSettingsStore.getState().settings.kerf_mm).toBe(0);
       expect(useCuttingSettingsStore.getState().settings.min_offcut_mm).toBe(500);
     });
   });

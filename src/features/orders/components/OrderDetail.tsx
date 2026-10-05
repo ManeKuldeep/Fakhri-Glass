@@ -14,7 +14,8 @@ import { useOrderDetail, useOrderCutPlans } from '../queries';
 import { formatMm, formatFtIn } from '../../inventory/utils';
 import { useState } from 'react';
 import { printOrderLabels } from '../../labels/services';
-import { useCancelOrder } from '../mutations';
+import { useCancelOrder, useMarkOrderDelivered } from '../mutations';
+import { printOrShareOrderInvoice } from '../invoiceServices';
 import { OffcutThumbnail, OffcutInspectionModal } from '../../inventory/components/OffcutVisualizer';
 import OrderCutVisualizerModal from './OrderCutVisualizerModal';
 import EditOrderModal from './EditOrderModal';
@@ -29,9 +30,11 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
   const { data: order, isLoading, error } = useOrderDetail(orderId ?? '');
   const { data: cutPlans } = useOrderCutPlans(orderId ?? '');
   const cancelOrder = useCancelOrder();
+  const markDelivered = useMarkOrderDelivered();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFtIn, setShowFtIn] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
   const [showCutVisualizer, setShowCutVisualizer] = useState(false);
   const [inspectPiece, setInspectPiece] = useState<{
     widthMm: number;
@@ -44,6 +47,43 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
     quantity: number;
   } | null>(null);
   const dimFormat = showFtIn ? formatFtIn : formatMm;
+
+  function handleMarkDelivered() {
+    if (!order) return;
+    Alert.alert(
+      `Mark Order #${order.order_no} as Delivered?`,
+      `Confirm that all glass pieces have been handed over or dispatched to customer ${order.customer.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Delivered',
+          style: 'default',
+          onPress: async () => {
+            try {
+              await markDelivered.mutateAsync(order.id);
+              Alert.alert('Order Delivered', `Order #${order.order_no} has been marked as delivered.`);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              Alert.alert('Delivery Update Failed', msg);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleInvoice(sharePdf = false) {
+    if (!order) return;
+    try {
+      setIsGeneratingInvoice(true);
+      await printOrShareOrderInvoice(order, { sharePdf });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Alert.alert('Invoice Generation Failed', msg);
+    } finally {
+      setIsGeneratingInvoice(false);
+    }
+  }
 
   function handleCancelOrder() {
     if (!order) return;
@@ -208,6 +248,52 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
                 <Text style={styles.cancelledBannerText}>
                   This order was cancelled. Tap "Edit" to modify items or reopen into New status.
                 </Text>
+              </View>
+            ) : null}
+
+            {/* Ready for Delivery Action Card (when status is 'cut') */}
+            {order.status === 'cut' ? (
+              <View style={styles.readyForDeliveryCard}>
+                <View style={styles.readyForDeliveryText}>
+                  <MaterialCommunityIcons name="truck-fast-outline" size={26} color="#059669" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.readyForDeliveryTitle}>Glass Cutting Completed</Text>
+                    <Text style={styles.readyForDeliverySubtitle}>
+                      All pieces have been cut and labeled. Ready for handover or customer dispatch.
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.markDeliveredBtn,
+                    pressed && styles.markDeliveredBtnPressed,
+                    markDelivered.isPending && styles.btnDisabled,
+                  ]}
+                  onPress={handleMarkDelivered}
+                  disabled={markDelivered.isPending}
+                >
+                  {markDelivered.isPending ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="check-circle-outline" size={18} color="#FFFFFF" />
+                      <Text style={styles.markDeliveredBtnText}>Mark as Delivered</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            ) : null}
+
+            {/* Delivered Confirmation Banner */}
+            {order.status === 'delivered' ? (
+              <View style={styles.deliveredBanner}>
+                <MaterialCommunityIcons name="check-decagram" size={24} color="#059669" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.deliveredBannerTitle}>Order Delivered</Text>
+                  <Text style={styles.deliveredBannerSubtitle}>
+                    All items have been delivered/handed over to the customer.
+                  </Text>
+                </View>
               </View>
             ) : null}
 
@@ -388,6 +474,55 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
                     ]}
                     onPress={() => handlePrintLabels(true)}
                     disabled={isPrinting}
+                  >
+                    <MaterialCommunityIcons name="share-variant-outline" size={18} color="#1A73E8" />
+                    <Text style={styles.shareLabelsBtnText}>Share PDF</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            {/* Tax / Retail Invoice Card */}
+            {order.status !== 'cancelled' ? (
+              <View style={styles.invoiceCard}>
+                <View style={styles.invoiceCardHeader}>
+                  <MaterialCommunityIcons name="file-document-outline" size={20} color="#1A73E8" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.invoiceCardTitle}>Tax / Retail Invoice</Text>
+                    <Text style={styles.invoiceCardSubtitle}>
+                      Generate and print or share a professional A4 PDF invoice.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.labelButtonsRow}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.printLabelsBtn,
+                      pressed && styles.printLabelsBtnPressed,
+                      isGeneratingInvoice && styles.btnDisabled,
+                    ]}
+                    onPress={() => handleInvoice(false)}
+                    disabled={isGeneratingInvoice}
+                  >
+                    {isGeneratingInvoice ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="printer" size={18} color="#FFFFFF" />
+                        <Text style={styles.printLabelsBtnText}>Print Invoice</Text>
+                      </>
+                    )}
+                  </Pressable>
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.shareLabelsBtn,
+                      pressed && styles.shareLabelsBtnPressed,
+                      isGeneratingInvoice && styles.btnDisabled,
+                    ]}
+                    onPress={() => handleInvoice(true)}
+                    disabled={isGeneratingInvoice}
                   >
                     <MaterialCommunityIcons name="share-variant-outline" size={18} color="#1A73E8" />
                     <Text style={styles.shareLabelsBtnText}>Share PDF</Text>
@@ -813,5 +948,93 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  readyForDeliveryCard: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: '#34D399',
+    gap: 12,
+  },
+  readyForDeliveryText: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  readyForDeliveryTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  readyForDeliverySubtitle: {
+    fontSize: 12,
+    color: '#047857',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  markDeliveredBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingVertical: 12,
+  },
+  markDeliveredBtnPressed: {
+    backgroundColor: '#047857',
+  },
+  markDeliveredBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  deliveredBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  deliveredBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  deliveredBannerSubtitle: {
+    fontSize: 12,
+    color: '#15803D',
+    marginTop: 2,
+  },
+  invoiceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  invoiceCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  invoiceCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  invoiceCardSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
 });
+
 

@@ -10,18 +10,46 @@ export interface FtIn {
   ft: number;
   /** Whole inches (0–11) */
   inches: number;
-  /** Remaining fractional inches, rounded to 1/8" */
+  /** Remaining fractional inches, rounded to 1/16" */
   fracInches: number;
+  /** Fractional string representation, e.g. '1/16', '3/16', or '' */
+  fracString: string;
 }
 
-/** Convert integer millimetres to feet + inches + fractional inches (1/8" precision). */
+export const FRACTIONS_16THS: { value: number; label: string }[] = [
+  { value: 0, label: '0"' },
+  { value: 1 / 16, label: '1/16"' },
+  { value: 2 / 16, label: '1/8"' },
+  { value: 3 / 16, label: '3/16"' },
+  { value: 4 / 16, label: '1/4"' },
+  { value: 5 / 16, label: '5/16"' },
+  { value: 6 / 16, label: '3/8"' },
+  { value: 7 / 16, label: '7/16"' },
+  { value: 8 / 16, label: '1/2"' },
+  { value: 9 / 16, label: '9/16"' },
+  { value: 10 / 16, label: '5/8"' },
+  { value: 11 / 16, label: '11/16"' },
+  { value: 12 / 16, label: '3/4"' },
+  { value: 13 / 16, label: '13/16"' },
+  { value: 14 / 16, label: '7/8"' },
+  { value: 15 / 16, label: '15/16"' },
+];
+
+export function fraction16thToString(frac: number): string {
+  const rounded16 = Math.round(frac * 16);
+  if (rounded16 <= 0 || rounded16 >= 16) return '';
+  const match = FRACTIONS_16THS.find((f) => Math.round(f.value * 16) === rounded16);
+  return match ? match.label.replace('"', '') : '';
+}
+
+/** Convert integer millimetres to feet + inches + fractional inches (1/16" precision). */
 export function mmToFtIn(mm: number): FtIn {
   const totalInches = mm / MM_PER_INCH;
   let ft = Math.floor(totalInches / INCHES_PER_FOOT);
   const remainingInches = totalInches - ft * INCHES_PER_FOOT;
   let wholeInches = Math.floor(remainingInches);
-  // Round fractional part to nearest 1/8"
-  let fracInches = Math.round((remainingInches - wholeInches) * 8) / 8;
+  // Round fractional part to nearest 1/16"
+  let fracInches = Math.round((remainingInches - wholeInches) * 16) / 16;
 
   // Handle rounding up to a whole inch
   if (fracInches >= 1) {
@@ -35,20 +63,24 @@ export function mmToFtIn(mm: number): FtIn {
     wholeInches -= INCHES_PER_FOOT;
   }
 
-  return { ft, inches: wholeInches, fracInches };
+  const fracString = fraction16thToString(fracInches);
+
+  return { ft, inches: wholeInches, fracInches, fracString };
 }
 
 /** Format mm as a human-readable ft/in string. */
 export function formatFtIn(mm: number): string {
-  const { ft, inches, fracInches } = mmToFtIn(mm);
+  const { ft, inches, fracInches, fracString } = mmToFtIn(mm);
   const parts: string[] = [];
   if (ft > 0) parts.push(`${ft}'`);
 
-  const totalIn = inches + fracInches;
-  if (totalIn > 0) {
-    // Show as fraction where helpful
-    if (fracInches > 0) {
-      parts.push(`${totalIn.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}"`);
+  if (inches > 0 || fracInches > 0) {
+    if (fracString) {
+      if (inches > 0) {
+        parts.push(`${inches} ${fracString}"`);
+      } else {
+        parts.push(`${fracString}"`);
+      }
     } else {
       parts.push(`${inches}"`);
     }
@@ -84,6 +116,33 @@ export function parseDimensionInput(input: string): number | null {
   const asNumber = Number(trimmed);
   if (!Number.isNaN(asNumber) && asNumber > 0) {
     return Math.round(asNumber);
+  }
+
+  // Fraction only: e.g. "3/16" or "3/16""
+  const fracOnlyMatch = trimmed.match(/^(\d+)\/(\d+)"?$/);
+  if (fracOnlyMatch) {
+    const num = Number(fracOnlyMatch[1]);
+    const den = Number(fracOnlyMatch[2]);
+    if (den > 0) return ftInToMm(0, num / den);
+  }
+
+  // Feet + inches with fraction: e.g. 4' 6 3/16" or 4'6 1/2"
+  const ftInFracMatch = trimmed.match(/^(\d+)'\s*(?:(\d+)\s+)?(\d+)\/(\d+)"?$/);
+  if (ftInFracMatch) {
+    const ft = Number(ftInFracMatch[1]);
+    const wholeIn = Number(ftInFracMatch[2] || 0);
+    const num = Number(ftInFracMatch[3]);
+    const den = Number(ftInFracMatch[4]);
+    if (den > 0) return ftInToMm(ft, wholeIn + num / den);
+  }
+
+  // Inches with fraction: e.g. 6 3/16" or 6 1/2"
+  const inFracMatch = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)"?$/);
+  if (inFracMatch) {
+    const wholeIn = Number(inFracMatch[1]);
+    const num = Number(inFracMatch[2]);
+    const den = Number(inFracMatch[3]);
+    if (den > 0) return ftInToMm(0, wholeIn + num / den);
   }
 
   // ft/in patterns: 4'6", 4' 6", 4', 6"

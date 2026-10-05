@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,8 +11,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActivityLog } from '../src/features/settings/queries';
-import type { ActivityLogFilters, ActivityLogRow } from '../src/features/settings/queries';
+import type { ActivityLogFilters } from '../src/features/settings/queries';
 import ActivityLogItem from '../src/features/settings/components/ActivityLogItem';
+import OrderGroupedLogItem from '../src/features/settings/components/OrderGroupedLogItem';
+import { groupActivityLogs, DisplayActivityItem } from '../src/features/settings/utils/groupActivityLogs';
 
 const CATEGORIES: { label: string; value: ActivityLogFilters['actionCategory'] }[] = [
   { label: 'All', value: 'all' },
@@ -38,8 +40,18 @@ export default function ActivityLogScreen() {
     setPage(0);
   };
 
+  const displayItems = useMemo(
+    () => (data?.items ? groupActivityLogs(data.items) : []),
+    [data?.items],
+  );
+
   const renderItem = useCallback(
-    ({ item }: { item: ActivityLogRow }) => <ActivityLogItem item={item} />,
+    ({ item }: { item: DisplayActivityItem }) => {
+      if (item.type === 'order_group') {
+        return <OrderGroupedLogItem group={item} />;
+      }
+      return <ActivityLogItem item={item.log} />;
+    },
     [],
   );
 
@@ -108,8 +120,8 @@ export default function ActivityLogScreen() {
         </View>
       ) : (
         <FlatList
-          data={data?.items ?? []}
-          keyExtractor={(item) => String(item.id)}
+          data={displayItems}
+          keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={[
             styles.listContent,
