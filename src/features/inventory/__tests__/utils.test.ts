@@ -8,7 +8,40 @@ import {
   calculateAreaSqFt,
   calculateAreaSqM,
   getAspectRatioInfo,
+  snapTo16th,
+  snapInchesWith16th,
 } from '../utils';
+
+describe('snapTo16th and snapInchesWith16th', () => {
+  it('snaps decimal 0.5 to 0.5 (8/16 = 1/2)', () => {
+    expect(snapTo16th(0.5)).toBe(0.5);
+  });
+
+  it('snaps decimal 0.25 to 0.25 (4/16 = 1/4)', () => {
+    expect(snapTo16th(0.25)).toBe(0.25);
+  });
+
+  it('snaps decimal 0.3 to 0.3125 (5/16)', () => {
+    expect(snapTo16th(0.3)).toBe(0.3125);
+  });
+
+  it('snaps decimal 0.1 to 0.125 (2/16 = 1/8)', () => {
+    expect(snapTo16th(0.1)).toBe(0.125);
+  });
+
+  it('snaps 6.5 inches to 6.5 (6 1/2")', () => {
+    expect(snapInchesWith16th(6.5)).toBe(6.5);
+  });
+
+  it('snaps 6.3 inches to 6.3125 (6 5/16")', () => {
+    expect(snapInchesWith16th(6.3)).toBe(6.3125);
+  });
+
+  it('ftInToMm automatically snaps decimal inches to 1/16 fraction', () => {
+    // 6.3 inches -> 6.3125 in * 25.4 = 160.3375 mm -> 160 mm
+    expect(ftInToMm(0, 6.3)).toBe(160);
+  });
+});
 
 describe('ftInToMm', () => {
   it('converts 4 feet 0 inches to 1219 mm', () => {

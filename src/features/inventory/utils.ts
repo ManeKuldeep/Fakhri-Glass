@@ -89,17 +89,41 @@ export function formatFtIn(mm: number): string {
   return parts.length > 0 ? parts.join(' ') : '0"';
 }
 
-/** Format mm as a simple mm string. */
+/** Format mm as a simple integer mm string (never point/decimal). */
 export function formatMm(mm: number): string {
-  return `${mm} mm`;
+  return `${Math.round(mm)} mm`;
+}
+
+/**
+ * Snaps a fractional value (between 0 and 1) to the nearest 1/16th (0, 1/16, 2/16, ..., 15/16).
+ */
+export function snapTo16th(val: number): number {
+  return Math.round(val * 16) / 16;
+}
+
+/**
+ * Snaps any decimal inches to the nearest 1/16th fraction.
+ * e.g., 6.5 -> 6.5 (6 1/2"), 6.3 -> 6.3125 (6 5/16"), 10.1 -> 10.125 (10 1/8")
+ */
+export function snapInchesWith16th(inches: number): number {
+  if (inches <= 0) return 0;
+  const whole = Math.floor(inches);
+  const frac = inches - whole;
+  const snappedFrac = snapTo16th(frac);
+  if (snappedFrac >= 1) {
+    return whole + 1;
+  }
+  return whole + snappedFrac;
 }
 
 /**
  * Convert feet and inches to integer millimetres.
- * Rounds to the nearest mm.
+ * Always snaps fractional/point inches to nearest 1/16" fraction for accurate calculation,
+ * and rounds result to the nearest integer mm.
  */
 export function ftInToMm(ft: number, inches: number): number {
-  const totalInches = ft * INCHES_PER_FOOT + inches;
+  const snappedInches = snapInchesWith16th(inches);
+  const totalInches = ft * INCHES_PER_FOOT + snappedInches;
   return Math.round(totalInches * MM_PER_INCH);
 }
 

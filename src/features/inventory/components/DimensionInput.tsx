@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { FRACTIONS_16THS, ftInToMm, mmToFtIn } from '../utils';
+import { FRACTIONS_16THS, ftInToMm, mmToFtIn, snapTo16th } from '../utils';
 
 export type DimensionUnit = 'mm' | 'ft-in';
 
@@ -15,8 +15,9 @@ interface DimensionInputProps {
 
 /**
  * Dimension input with a unit toggle (mm / ft-in).
- * - In mm mode: single numeric input, value stored directly.
- * - In ft-in mode: numeric inputs (feet + inches) + 1/16" fraction picker, converted to mm on change.
+ * - In mm mode: single numeric input, integer mm only (no point values).
+ * - In ft-in mode: numeric inputs (feet + inches) + 1/16" fraction picker.
+ *   Typing a point/decimal in inches automatically snaps to the nearest 1/16th fraction.
  * Parent always receives integer mm via onValueChange.
  */
 export default function DimensionInput({
@@ -38,7 +39,7 @@ export default function DimensionInput({
   // Pre-fill from initialMm when it changes (edit form)
   useEffect(() => {
     if (initialMm != null && initialMm > 0) {
-      setMmText(String(initialMm));
+      setMmText(String(Math.round(initialMm)));
       const { ft, inches, fracInches } = mmToFtIn(initialMm);
       setFtText(ft > 0 ? String(ft) : '');
       setInText(inches > 0 ? String(inches) : '');
@@ -78,18 +79,48 @@ export default function DimensionInput({
   }
 
   function handleMmChange(text: string) {
-    setMmText(text);
-    emitMm('mm', text, ftText, inText, selectedFrac);
+    // mm values must never have point / decimal values: integer only
+    const sanitized = text.replace(/[^0-9]/g, '');
+    setMmText(sanitized);
+    emitMm('mm', sanitized, ftText, inText, selectedFrac);
   }
 
   function handleFtChange(text: string) {
-    setFtText(text);
-    emitMm('ft-in', mmText, text, inText, selectedFrac);
+    const sanitized = text.replace(/[^0-9]/g, '');
+    setFtText(sanitized);
+    emitMm('ft-in', mmText, sanitized, inText, selectedFrac);
   }
 
   function handleInChange(text: string) {
-    setInText(text);
-    emitMm('ft-in', mmText, ftText, text, selectedFrac);
+    // If user enters a decimal point value (e.g. "6.5" or "10.25" or "8.3"):
+    // Automatically snap the point part to the nearest 1/16 fraction!
+    if (text.includes('.')) {
+      const parts = text.split('.');
+      const wholeStr = parts[0].replace(/[^0-9]/g, '');
+      const fracStr = parts[1] || '';
+
+      if (fracStr.length > 0) {
+        const decVal = Number('0.' + fracStr);
+        if (!Number.isNaN(decVal)) {
+          const snapped = snapTo16th(decVal);
+          if (snapped >= 1) {
+            const nextWhole = (parseInt(wholeStr, 10) || 0) + 1;
+            setInText(String(nextWhole));
+            setSelectedFrac(0);
+            emitMm('ft-in', mmText, ftText, String(nextWhole), 0);
+            return;
+          }
+          setInText(wholeStr);
+          setSelectedFrac(snapped);
+          emitMm('ft-in', mmText, ftText, wholeStr, snapped);
+          return;
+        }
+      }
+    }
+
+    const sanitized = text.replace(/[^0-9.]/g, '');
+    setInText(sanitized);
+    emitMm('ft-in', mmText, ftText, sanitized, selectedFrac);
   }
 
   function handleFracChange(fracValue: number) {
@@ -152,15 +183,20 @@ export default function DimensionInput({
 
       {/* Input fields */}
       {unit === 'mm' ? (
-        <TextInput
-          style={[styles.input, !editable && styles.inputDisabled]}
-          value={mmText}
-          onChangeText={handleMmChange}
-          placeholder="e.g. 1200"
-          placeholderTextColor="#94A3B8"
-          keyboardType="numeric"
-          editable={editable}
-        />
+        <View>
+          <TextInput
+            style={[styles.input, !editable && styles.inputDisabled]}
+            value={mmText}
+            onChangeText={handleMmChange}
+            placeholder="e.g. 1200 (whole mm only)"
+            placeholderTextColor="#94A3B8"
+            keyboardType="number-pad"
+            editable={editable}
+          />
+          <Text style={styles.mmHelperText}>
+            Whole mm only (no decimals). For fractional points, use ft / in (1/16").
+          </Text>
+        </View>
       ) : (
         <View style={styles.ftInContainer}>
           <View style={styles.ftInRow}>
@@ -335,5 +371,11 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '600',
     alignSelf: 'flex-end',
+  },
+  mmHelperText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 4,
+    marginLeft: 2,
   },
 });
