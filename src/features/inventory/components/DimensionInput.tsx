@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { FRACTIONS_16THS, ftInToMm, mmToFtIn, snapTo16th } from '../utils';
+import {
+  FRACTIONS_MM_16THS,
+  formatMm,
+  ftInToMm,
+  ftInToMmWithFrac,
+  mmToFtIn,
+  snapTo16th,
+} from '../utils';
 
 export type DimensionUnit = 'mm' | 'ft-in';
 
@@ -15,10 +22,10 @@ interface DimensionInputProps {
 
 /**
  * Dimension input with a unit toggle (mm / ft-in).
- * - In mm mode: single numeric input, integer mm only (no point values).
- * - In ft-in mode: numeric inputs (feet + inches) + 1/16" fraction picker.
- *   Typing a point/decimal in inches automatically snaps to the nearest 1/16th fraction.
- * Parent always receives integer mm via onValueChange.
+ * - In mm mode: whole mm input + 1/16 mm fraction selector (0, 1/16, 1/8, ..., 15/16).
+ *   Typing a decimal point automatically snaps to the nearest 1/16 fraction.
+ * - In ft-in mode: numeric inputs (feet + inches) without fraction picker (mm is the smallest unit).
+ * Parent receives integer mm via onValueChange for storage/cutting.
  */
 export default function DimensionInput({
   label,
@@ -30,25 +37,33 @@ export default function DimensionInput({
 
   // mm mode state
   const [mmText, setMmText] = useState('');
+  const [selectedFrac, setSelectedFrac] = useState(0);
 
   // ft-in mode state
   const [ftText, setFtText] = useState('');
   const [inText, setInText] = useState('');
-  const [selectedFrac, setSelectedFrac] = useState(0);
 
   // Pre-fill from initialMm when it changes (edit form)
   useEffect(() => {
     if (initialMm != null && initialMm > 0) {
-      setMmText(String(Math.round(initialMm)));
-      const { ft, inches, fracInches } = mmToFtIn(initialMm);
+      const whole = Math.floor(initialMm);
+      const frac = snapTo16th(initialMm - whole);
+      if (frac >= 1) {
+        setMmText(String(whole + 1));
+        setSelectedFrac(0);
+      } else {
+        setMmText(String(whole));
+        setSelectedFrac(frac);
+      }
+
+      const { ft, inches } = mmToFtIn(initialMm);
       setFtText(ft > 0 ? String(ft) : '');
       setInText(inches > 0 ? String(inches) : '');
-      setSelectedFrac(fracInches);
     } else {
       setMmText('');
+      setSelectedFrac(0);
       setFtText('');
       setInText('');
-      setSelectedFrac(0);
     }
   }, [initialMm]);
 
@@ -56,20 +71,22 @@ export default function DimensionInput({
   function emitMm(
     newUnit: DimensionUnit,
     newMm: string,
+    newFrac: number,
     newFt: string,
     newIn: string,
-    newFrac: number,
   ) {
     if (newUnit === 'mm') {
-      const val = Number(newMm);
-      if (newMm.trim() === '' || Number.isNaN(val) || val <= 0) {
+      const whole = Number(newMm) || 0;
+      const total = whole + newFrac;
+      if (newMm.trim() === '' || total <= 0) {
         onValueChange(null);
       } else {
-        onValueChange(Math.round(val));
+        // Emit rounded integer mm for database/cutting calculations
+        onValueChange(Math.round(total));
       }
     } else {
       const ft = Number(newFt) || 0;
-      const inches = (Number(newIn) || 0) + newFrac;
+      const inches = Number(newIn) || 0;
       if (ft === 0 && inches === 0) {
         onValueChange(null);
       } else {
@@ -79,21 +96,8 @@ export default function DimensionInput({
   }
 
   function handleMmChange(text: string) {
-    // mm values must never have point / decimal values: integer only
-    const sanitized = text.replace(/[^0-9]/g, '');
-    setMmText(sanitized);
-    emitMm('mm', sanitized, ftText, inText, selectedFrac);
-  }
-
-  function handleFtChange(text: string) {
-    const sanitized = text.replace(/[^0-9]/g, '');
-    setFtText(sanitized);
-    emitMm('ft-in', mmText, sanitized, inText, selectedFrac);
-  }
-
-  function handleInChange(text: string) {
-    // If user enters a decimal point value (e.g. "6.5" or "10.25" or "8.3"):
-    // Automatically snap the point part to the nearest 1/16 fraction!
+    // If user enters a decimal point value in mm (e.g. "100.5" or "125.25" or "500.1"):
+    // Automatically snap the point part to the nearest 1/16 mm fraction!
     if (text.includes('.')) {
       const parts = text.split('.');
       const wholeStr = parts[0].replace(/[^0-9]/g, '');
@@ -105,56 +109,71 @@ export default function DimensionInput({
           const snapped = snapTo16th(decVal);
           if (snapped >= 1) {
             const nextWhole = (parseInt(wholeStr, 10) || 0) + 1;
-            setInText(String(nextWhole));
+            setMmText(String(nextWhole));
             setSelectedFrac(0);
-            emitMm('ft-in', mmText, ftText, String(nextWhole), 0);
+            emitMm('mm', String(nextWhole), 0, ftText, inText);
             return;
           }
-          setInText(wholeStr);
+          setMmText(wholeStr);
           setSelectedFrac(snapped);
-          emitMm('ft-in', mmText, ftText, wholeStr, snapped);
+          emitMm('mm', wholeStr, snapped, ftText, inText);
           return;
         }
       }
     }
 
-    const sanitized = text.replace(/[^0-9.]/g, '');
-    setInText(sanitized);
-    emitMm('ft-in', mmText, ftText, sanitized, selectedFrac);
+    const sanitized = text.replace(/[^0-9]/g, '');
+    setMmText(sanitized);
+    emitMm('mm', sanitized, selectedFrac, ftText, inText);
   }
 
   function handleFracChange(fracValue: number) {
     setSelectedFrac(fracValue);
-    emitMm('ft-in', mmText, ftText, inText, fracValue);
+    emitMm('mm', mmText, fracValue, ftText, inText);
+  }
+
+  function handleFtChange(text: string) {
+    const sanitized = text.replace(/[^0-9]/g, '');
+    setFtText(sanitized);
+    emitMm('ft-in', mmText, selectedFrac, sanitized, inText);
+  }
+
+  function handleInChange(text: string) {
+    const sanitized = text.replace(/[^0-9.]/g, '');
+    setInText(sanitized);
+    emitMm('ft-in', mmText, selectedFrac, ftText, sanitized);
   }
 
   function handleUnitToggle(newUnit: DimensionUnit) {
     if (newUnit === unit) return;
 
     // Convert current value into the new unit's fields
-    if (newUnit === 'ft-in' && mmText.trim() !== '') {
-      const val = Number(mmText);
-      if (!Number.isNaN(val) && val > 0) {
-        const { ft, inches, fracInches } = mmToFtIn(Math.round(val));
+    if (newUnit === 'ft-in' && (mmText.trim() !== '' || selectedFrac > 0)) {
+      const totalMm = (Number(mmText) || 0) + selectedFrac;
+      if (totalMm > 0) {
+        const { ft, inches } = mmToFtIn(totalMm);
         setFtText(ft > 0 ? String(ft) : '');
         setInText(inches > 0 ? String(inches) : '');
-        setSelectedFrac(fracInches);
       }
-    } else if (newUnit === 'mm' && (ftText.trim() !== '' || inText.trim() !== '' || selectedFrac > 0)) {
+    } else if (newUnit === 'mm' && (ftText.trim() !== '' || inText.trim() !== '')) {
       const ft = Number(ftText) || 0;
-      const inches = (Number(inText) || 0) + selectedFrac;
+      const inches = Number(inText) || 0;
       if (ft > 0 || inches > 0) {
-        setMmText(String(ftInToMm(ft, inches)));
+        const { wholeMm, fracMm } = ftInToMmWithFrac(ft, inches);
+        setMmText(wholeMm > 0 ? String(wholeMm) : '');
+        setSelectedFrac(fracMm);
       }
     }
 
     setUnit(newUnit);
   }
 
-  const computedMm =
+  const computedMmFromFtIn =
     unit === 'ft-in'
-      ? ftInToMm(Number(ftText) || 0, (Number(inText) || 0) + selectedFrac)
-      : Number(mmText) || 0;
+      ? ftInToMmWithFrac(Number(ftText) || 0, Number(inText) || 0).totalMm
+      : 0;
+
+  const currentMmValue = (Number(mmText) || 0) + selectedFrac;
 
   return (
     <View style={styles.container}>
@@ -175,7 +194,7 @@ export default function DimensionInput({
             style={[styles.unitBtn, unit === 'ft-in' && styles.unitBtnActive]}
           >
             <Text style={[styles.unitBtnText, unit === 'ft-in' && styles.unitBtnTextActive]}>
-              ft / in (1/16")
+              ft / in
             </Text>
           </Pressable>
         </View>
@@ -188,14 +207,46 @@ export default function DimensionInput({
             style={[styles.input, !editable && styles.inputDisabled]}
             value={mmText}
             onChangeText={handleMmChange}
-            placeholder="e.g. 1200 (whole mm only)"
+            placeholder="e.g. 1200 (mm)"
             placeholderTextColor="#94A3B8"
-            keyboardType="number-pad"
+            keyboardType="numeric"
             editable={editable}
           />
-          <Text style={styles.mmHelperText}>
-            Whole mm only (no decimals). For fractional points, use ft / in (1/16").
-          </Text>
+
+          {/* 1/16th Fraction Picker for MM */}
+          <View style={styles.fractionRow}>
+            <Text style={styles.fractionTitle}>Fraction (mm):</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.fracScroll}
+            >
+              {FRACTIONS_MM_16THS.map((f) => {
+                const isSelected = Math.abs(f.value - selectedFrac) < 0.001;
+                return (
+                  <Pressable
+                    key={f.label}
+                    style={[styles.fracChip, isSelected && styles.fracChipActive]}
+                    onPress={() => handleFracChange(f.value)}
+                    disabled={!editable}
+                  >
+                    <Text style={[styles.fracChipText, isSelected && styles.fracChipTextActive]}>
+                      {f.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          <View style={styles.mmFooterRow}>
+            <Text style={styles.mmHelperText}>
+              Point values automatically convert to 1/16 mm fractions.
+            </Text>
+            {currentMmValue > 0 ? (
+              <Text style={styles.convertedHint}>= {formatMm(currentMmValue)}</Text>
+            ) : null}
+          </View>
         </View>
       ) : (
         <View style={styles.ftInContainer}>
@@ -226,34 +277,8 @@ export default function DimensionInput({
             </View>
           </View>
 
-          {/* 1/16th Fraction Picker */}
-          <View style={styles.fractionRow}>
-            <Text style={styles.fractionTitle}>Fraction:</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.fracScroll}
-            >
-              {FRACTIONS_16THS.map((f) => {
-                const isSelected = Math.abs(f.value - selectedFrac) < 0.001;
-                return (
-                  <Pressable
-                    key={f.label}
-                    style={[styles.fracChip, isSelected && styles.fracChipActive]}
-                    onPress={() => handleFracChange(f.value)}
-                    disabled={!editable}
-                  >
-                    <Text style={[styles.fracChipText, isSelected && styles.fracChipTextActive]}>
-                      {f.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          {computedMm > 0 ? (
-            <Text style={styles.convertedHint}>= {computedMm} mm</Text>
+          {computedMmFromFtIn > 0 ? (
+            <Text style={styles.convertedHint}>= {formatMm(computedMmFromFtIn)}</Text>
           ) : null}
         </View>
       )}
@@ -372,10 +397,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     alignSelf: 'flex-end',
   },
+  mmFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   mmHelperText: {
     fontSize: 11,
     color: '#64748B',
-    marginTop: 4,
     marginLeft: 2,
+    flex: 1,
   },
 });

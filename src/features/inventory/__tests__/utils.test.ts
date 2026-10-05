@@ -3,6 +3,7 @@ import {
   formatFtIn,
   formatMm,
   ftInToMm,
+  ftInToMmWithFrac,
   parseDimensionInput,
   friendlyStockError,
   calculateAreaSqFt,
@@ -10,6 +11,8 @@ import {
   getAspectRatioInfo,
   snapTo16th,
   snapInchesWith16th,
+  mmFractionToString,
+  FRACTIONS_MM_16THS,
 } from '../utils';
 
 describe('snapTo16th and snapInchesWith16th', () => {
@@ -75,9 +78,61 @@ describe('mmToFtIn', () => {
   });
 });
 
+describe('mmFractionToString and FRACTIONS_MM_16THS', () => {
+  it('has 16 simplified fraction items', () => {
+    expect(FRACTIONS_MM_16THS).toHaveLength(16);
+    expect(FRACTIONS_MM_16THS[0].label).toBe('0');
+    expect(FRACTIONS_MM_16THS[1].label).toBe('1/16');
+    expect(FRACTIONS_MM_16THS[2].label).toBe('1/8');
+    expect(FRACTIONS_MM_16THS[8].label).toBe('1/2');
+    expect(FRACTIONS_MM_16THS[15].label).toBe('15/16');
+  });
+
+  it('converts fractions to simplified strings', () => {
+    expect(mmFractionToString(0.5)).toBe('1/2');
+    expect(mmFractionToString(0.25)).toBe('1/4');
+    expect(mmFractionToString(0.125)).toBe('1/8');
+    expect(mmFractionToString(0.0625)).toBe('1/16');
+    expect(mmFractionToString(0.6875)).toBe('11/16');
+    expect(mmFractionToString(0)).toBe('');
+  });
+});
+
 describe('formatMm', () => {
-  it('formats 1200 as "1200 mm"', () => {
+  it('formats whole number 1200 as "1200 mm"', () => {
     expect(formatMm(1200)).toBe('1200 mm');
+  });
+
+  it('formats decimal 100.5 as "100 1/2 mm"', () => {
+    expect(formatMm(100.5)).toBe('100 1/2 mm');
+  });
+
+  it('formats decimal 100.25 as "100 1/4 mm"', () => {
+    expect(formatMm(100.25)).toBe('100 1/4 mm');
+  });
+
+  it('formats decimal 100.0625 as "100 1/16 mm"', () => {
+    expect(formatMm(100.0625)).toBe('100 1/16 mm');
+  });
+
+  it('formats converted decimal 139.7 as "139 11/16 mm"', () => {
+    expect(formatMm(139.7)).toBe('139 11/16 mm');
+  });
+
+  it('formats fraction-only 0.5 as "1/2 mm"', () => {
+    expect(formatMm(0.5)).toBe('1/2 mm');
+  });
+
+  it('formats 0 as "0 mm"', () => {
+    expect(formatMm(0)).toBe('0 mm');
+  });
+});
+
+describe('ftInToMmWithFrac', () => {
+  it('converts 1 foot (12 inches) to 304 mm with 13/16 mm fraction', () => {
+    const res = ftInToMmWithFrac(1, 0);
+    expect(res.wholeMm).toBe(304);
+    expect(res.fracMm).toBe(13 / 16);
   });
 });
 
@@ -95,6 +150,18 @@ describe('formatFtIn', () => {
 describe('parseDimensionInput', () => {
   it('parses plain number as mm', () => {
     expect(parseDimensionInput('1200')).toBe(1200);
+  });
+
+  it('parses number with explicit mm unit', () => {
+    expect(parseDimensionInput('1200 mm')).toBe(1200);
+  });
+
+  it('parses mm with 1/16 fraction (100 1/2 mm)', () => {
+    expect(parseDimensionInput('100 1/2 mm')).toBe(101);
+  });
+
+  it('parses mm with fraction without unit (100 1/4)', () => {
+    expect(parseDimensionInput('100 1/4')).toBe(100);
   });
 
   it('rounds fractional mm', () => {

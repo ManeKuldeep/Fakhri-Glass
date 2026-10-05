@@ -16,30 +16,36 @@ export interface FtIn {
   fracString: string;
 }
 
-export const FRACTIONS_16THS: { value: number; label: string }[] = [
-  { value: 0, label: '0"' },
-  { value: 1 / 16, label: '1/16"' },
-  { value: 2 / 16, label: '1/8"' },
-  { value: 3 / 16, label: '3/16"' },
-  { value: 4 / 16, label: '1/4"' },
-  { value: 5 / 16, label: '5/16"' },
-  { value: 6 / 16, label: '3/8"' },
-  { value: 7 / 16, label: '7/16"' },
-  { value: 8 / 16, label: '1/2"' },
-  { value: 9 / 16, label: '9/16"' },
-  { value: 10 / 16, label: '5/8"' },
-  { value: 11 / 16, label: '11/16"' },
-  { value: 12 / 16, label: '3/4"' },
-  { value: 13 / 16, label: '13/16"' },
-  { value: 14 / 16, label: '7/8"' },
-  { value: 15 / 16, label: '15/16"' },
+export const FRACTIONS_MM_16THS: { value: number; label: string }[] = [
+  { value: 0, label: '0' },
+  { value: 1 / 16, label: '1/16' },
+  { value: 2 / 16, label: '1/8' },
+  { value: 3 / 16, label: '3/16' },
+  { value: 4 / 16, label: '1/4' },
+  { value: 5 / 16, label: '5/16' },
+  { value: 6 / 16, label: '3/8' },
+  { value: 7 / 16, label: '7/16' },
+  { value: 8 / 16, label: '1/2' },
+  { value: 9 / 16, label: '9/16' },
+  { value: 10 / 16, label: '5/8' },
+  { value: 11 / 16, label: '11/16' },
+  { value: 12 / 16, label: '3/4' },
+  { value: 13 / 16, label: '13/16' },
+  { value: 14 / 16, label: '7/8' },
+  { value: 15 / 16, label: '15/16' },
 ];
 
-export function fraction16thToString(frac: number): string {
+export const FRACTIONS_16THS = FRACTIONS_MM_16THS;
+
+export function mmFractionToString(frac: number): string {
   const rounded16 = Math.round(frac * 16);
   if (rounded16 <= 0 || rounded16 >= 16) return '';
-  const match = FRACTIONS_16THS.find((f) => Math.round(f.value * 16) === rounded16);
-  return match ? match.label.replace('"', '') : '';
+  const match = FRACTIONS_MM_16THS.find((f) => Math.round(f.value * 16) === rounded16);
+  return match ? match.label : '';
+}
+
+export function fraction16thToString(frac: number): string {
+  return mmFractionToString(frac);
 }
 
 /** Convert integer millimetres to feet + inches + fractional inches (1/16" precision). */
@@ -63,7 +69,7 @@ export function mmToFtIn(mm: number): FtIn {
     wholeInches -= INCHES_PER_FOOT;
   }
 
-  const fracString = fraction16thToString(fracInches);
+  const fracString = mmFractionToString(fracInches);
 
   return { ft, inches: wholeInches, fracInches, fracString };
 }
@@ -89,9 +95,32 @@ export function formatFtIn(mm: number): string {
   return parts.length > 0 ? parts.join(' ') : '0"';
 }
 
-/** Format mm as a simple integer mm string (never point/decimal). */
+/**
+ * Format mm as a human-readable mm string.
+ * If mm has a decimal/point or fraction (e.g. from unit conversion),
+ * it always displays the fraction in 1/16 simplified terms (e.g. "100 1/2 mm").
+ */
 export function formatMm(mm: number): string {
-  return `${Math.round(mm)} mm`;
+  if (mm <= 0) return '0 mm';
+  const whole = Math.floor(mm);
+  const frac = mm - whole;
+  const snappedFrac = snapTo16th(frac);
+
+  if (snappedFrac >= 1) {
+    return `${whole + 1} mm`;
+  }
+
+  if (snappedFrac > 0) {
+    const fracStr = mmFractionToString(snappedFrac);
+    if (fracStr) {
+      if (whole > 0) {
+        return `${whole} ${fracStr} mm`;
+      }
+      return `${fracStr} mm`;
+    }
+  }
+
+  return `${whole} mm`;
 }
 
 /**
@@ -128,6 +157,25 @@ export function ftInToMm(ft: number, inches: number): number {
 }
 
 /**
+ * Convert feet and inches to millimetres with whole mm and 1/16 mm fraction breakdown.
+ */
+export function ftInToMmWithFrac(ft: number, inches: number): {
+  wholeMm: number;
+  fracMm: number;
+  totalMm: number;
+} {
+  const totalInches = ft * INCHES_PER_FOOT + inches;
+  const exactMm = totalInches * MM_PER_INCH;
+  const wholeMm = Math.floor(exactMm);
+  const frac = exactMm - wholeMm;
+  const snappedFrac = snapTo16th(frac);
+  if (snappedFrac >= 1) {
+    return { wholeMm: wholeMm + 1, fracMm: 0, totalMm: wholeMm + 1 };
+  }
+  return { wholeMm, fracMm: snappedFrac, totalMm: wholeMm + snappedFrac };
+}
+
+/**
  * Parse a user-entered dimension string.
  * Accepts: "1200" (mm), "4'" (feet only), "4'6" or "4' 6"" (ft+in), "6"" (inches only).
  * Returns integer mm or null if unparseable.
@@ -136,18 +184,35 @@ export function parseDimensionInput(input: string): number | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
+  // Trailing 'mm' stripping for pure mm inputs: e.g. "1200 mm" or "100 1/2 mm"
+  const cleanMm = trimmed.replace(/\s*mm$/i, '').trim();
+
   // Pure number → treat as mm
-  const asNumber = Number(trimmed);
+  const asNumber = Number(cleanMm);
   if (!Number.isNaN(asNumber) && asNumber > 0) {
     return Math.round(asNumber);
   }
 
-  // Fraction only: e.g. "3/16" or "3/16""
+  // mm with fraction: e.g. "100 1/2" or "100 1/2 mm"
+  const mmFracMatch = cleanMm.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+  if (mmFracMatch && !trimmed.includes('"') && !trimmed.includes("'")) {
+    const whole = Number(mmFracMatch[1]);
+    const num = Number(mmFracMatch[2]);
+    const den = Number(mmFracMatch[3]);
+    if (den > 0) return Math.round(whole + num / den);
+  }
+
+  // Fraction only: e.g. "3/16"" or "3/16"
   const fracOnlyMatch = trimmed.match(/^(\d+)\/(\d+)"?$/);
   if (fracOnlyMatch) {
     const num = Number(fracOnlyMatch[1]);
     const den = Number(fracOnlyMatch[2]);
-    if (den > 0) return ftInToMm(0, num / den);
+    if (den > 0) {
+      if (trimmed.endsWith('"')) {
+        return ftInToMm(0, num / den);
+      }
+      return Math.round(num / den);
+    }
   }
 
   // Feet + inches with fraction: e.g. 4' 6 3/16" or 4'6 1/2"
