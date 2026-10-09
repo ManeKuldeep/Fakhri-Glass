@@ -54,13 +54,17 @@ function useProtectedRoute() {
 
     const inAuthGroup = segments[0] === 'login';
 
-    if (!profile && !inAuthGroup) {
-      router.replace('/login');
-    } else if (profile && inAuthGroup) {
-      // Landing tab depends on assignment: cutter → Cut, everyone else → Orders
-      const landing = profile.assignment === 'cutter' ? '/(tabs)/cut' : '/(tabs)/orders';
-      router.replace(landing);
-    }
+    const timer = setTimeout(() => {
+      if (!profile && !inAuthGroup) {
+        router.replace('/login');
+      } else if (profile && inAuthGroup) {
+        // Landing tab depends on assignment: cutter → Cut, everyone else → Orders
+        const landing = profile.assignment === 'cutter' ? '/(tabs)/cut' : '/(tabs)/orders';
+        router.replace(landing);
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [profile, isLoading, segments, router, rootNavigationState?.key]);
 }
 

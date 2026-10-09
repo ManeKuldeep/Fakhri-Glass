@@ -56,7 +56,7 @@ export default function ActivityLogScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
       {/* ── Header ── */}
       <View style={styles.header}>
         <Pressable
@@ -125,7 +125,7 @@ export default function ActivityLogScreen() {
           renderItem={renderItem}
           contentContainerStyle={[
             styles.listContent,
-            { paddingBottom: insets.bottom + 20 },
+            { paddingBottom: Math.max(insets.bottom, 16) + 20 },
           ]}
           refreshing={isFetching && !isLoading}
           onRefresh={() => void refetch()}

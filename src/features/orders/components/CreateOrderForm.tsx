@@ -230,6 +230,7 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
+      statusBarTranslucent
     >
       <View style={styles.modalContainer}>
         {/* Header with notch/status bar spacing */}
@@ -245,7 +246,10 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Customer ── */}

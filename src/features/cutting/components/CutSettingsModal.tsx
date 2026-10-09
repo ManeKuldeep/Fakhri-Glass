@@ -71,6 +71,7 @@ export default function CutSettingsModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
       <View style={styles.container}>
         {/* Header with notch/status bar spacing */}
@@ -84,7 +85,7 @@ export default function CutSettingsModal({
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}>
           <Text style={styles.sectionSubtitle}>
             Configure blade allowances and offcut thresholds. Changes re-run the layout optimizer.
           </Text>

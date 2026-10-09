@@ -105,6 +105,7 @@ export default function EditStockForm({ visible, onClose, item }: EditStockFormP
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
       <View style={styles.modalContainer}>
         {/* Header with notch/status bar spacing */}
@@ -120,7 +121,7 @@ export default function EditStockForm({ visible, onClose, item }: EditStockFormP
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}
           keyboardShouldPersistTaps="handled"
         >
           {/* Product info (read-only) */}

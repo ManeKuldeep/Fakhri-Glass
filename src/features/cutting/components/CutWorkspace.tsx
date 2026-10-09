@@ -884,7 +884,7 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
       />
 
       {/* Action Footer */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <Pressable
           style={styles.reoptimizeBtn}
           onPress={() => void runOptimizer()}

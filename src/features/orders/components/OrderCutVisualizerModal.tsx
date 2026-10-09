@@ -159,6 +159,7 @@ export default function OrderCutVisualizerModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
       <View style={styles.modalRoot}>
         {/* Header with notch/status bar spacing */}
@@ -180,7 +181,10 @@ export default function OrderCutVisualizerModal({
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {sheets.length === 0 ? (

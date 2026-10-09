@@ -372,6 +372,7 @@ export default function CutCanvas({
             transparent
             animationType="fade"
             onRequestClose={() => setMoveModalVisible(false)}
+            statusBarTranslucent
           >
             <Pressable
               style={styles.modalBackdrop}

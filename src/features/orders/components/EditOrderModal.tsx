@@ -249,6 +249,7 @@ export default function EditOrderModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
       <View style={styles.modalContainer}>
         {/* Header with notch/status bar spacing */}
@@ -264,7 +265,10 @@ export default function EditOrderModal({
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 24 },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           {/* Customer Details */}

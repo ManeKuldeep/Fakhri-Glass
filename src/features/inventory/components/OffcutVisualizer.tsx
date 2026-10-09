@@ -213,6 +213,7 @@ export function OffcutInspectionModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
       <View style={styles.modalRoot}>
         {/* Header with notch/status bar spacing */}
@@ -240,7 +241,7 @@ export function OffcutInspectionModal({
 
         <ScrollView
           style={styles.modalScroll}
-          contentContainerStyle={styles.modalScrollContent}
+          contentContainerStyle={[styles.modalScrollContent, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* ── Visual Scale Canvas Card ── */}
