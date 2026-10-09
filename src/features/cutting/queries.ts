@@ -89,7 +89,9 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
       if (!taskMap.has(key)) {
         taskMap.set(key, {
           orderId: order.id,
+          orderIds: [order.id],
           orderNo: order.order_no,
+          orderNos: [order.order_no],
           store: order.store,
           customerName: order.customer.name,
           customerPhone: order.customer.phone,
@@ -101,6 +103,15 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
           isLining: prod.is_lining,
           totalPiecesCount: 0,
           orderItems: [],
+          ordersSummary: [
+            {
+              orderId: order.id,
+              orderNo: order.order_no,
+              customerName: order.customer.name,
+              store: order.store,
+              piecesCount: 0,
+            },
+          ],
         });
       }
 
@@ -109,8 +120,14 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
       const allowance = isPolished ? 3 : 0;
 
       task.totalPiecesCount += item.qty;
+      if (task.ordersSummary && task.ordersSummary.length > 0) {
+        task.ordersSummary[0].piecesCount += item.qty;
+      }
       task.orderItems.push({
         orderItemId: item.id,
+        orderId: order.id,
+        orderNo: order.order_no,
+        customerName: order.customer.name,
         widthMm: item.width_mm + allowance,
         heightMm: item.height_mm + allowance,
         qty: item.qty,
@@ -122,6 +139,51 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
   }
 
   return Array.from(taskMap.values()).filter((t) => t.totalPiecesCount > 0);
+}
+
+/**
+ * Merge multiple tasks of the same product into a single multi-order cutting task.
+ */
+export function mergeCuttingQueueTasks(tasks: CuttingQueueTask[]): CuttingQueueTask {
+  if (tasks.length === 0) {
+    throw new Error('No tasks to merge');
+  }
+  if (tasks.length === 1) {
+    return tasks[0];
+  }
+
+  const base = tasks[0];
+  const allOrderIds: string[] = [];
+  const allOrderNos: number[] = [];
+  const allOrderItems: CuttingQueueTask['orderItems'] = [];
+  const allSummaries: NonNullable<CuttingQueueTask['ordersSummary']> = [];
+  let totalPieces = 0;
+
+  for (const t of tasks) {
+    for (const oid of t.orderIds) {
+      if (!allOrderIds.includes(oid)) allOrderIds.push(oid);
+    }
+    for (const ono of t.orderNos) {
+      if (!allOrderNos.includes(ono)) allOrderNos.push(ono);
+    }
+    allOrderItems.push(...t.orderItems);
+    totalPieces += t.totalPiecesCount;
+    if (t.ordersSummary) {
+      allSummaries.push(...t.ordersSummary);
+    }
+  }
+
+  return {
+    ...base,
+    orderId: base.orderId,
+    orderIds: allOrderIds,
+    orderNo: base.orderNo,
+    orderNos: allOrderNos,
+    customerName: `${allOrderNos.length} Orders (${allOrderNos.map((n) => `#${n}`).join(', ')})`,
+    totalPiecesCount: totalPieces,
+    orderItems: allOrderItems,
+    ordersSummary: allSummaries,
+  };
 }
 
 export async function fetchStockForProduct(productId: string): Promise<CuttingSheet[]> {

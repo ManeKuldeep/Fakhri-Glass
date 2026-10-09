@@ -1,11 +1,16 @@
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
+jest.mock('../../../lib/supabase', () => ({
+  supabase: {},
+}));
 
 import { useCuttingSettingsStore } from '../stores/cuttingSettingsStore';
 import { DEFAULT_OPTIMIZER_SETTINGS } from '../../../optimizer/types';
 import { piecesOverlap } from '../../../optimizer/validation';
-import { friendlyConfirmCutError } from '../utils';
+import { friendlyConfirmCutError, findBestPlacementOnSheet } from '../utils';
+import { mergeCuttingQueueTasks } from '../queries';
+import { CuttingQueueTask } from '../types';
 
 describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
   beforeEach(() => {
@@ -13,10 +18,10 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
   });
 
   describe('Settings Store', () => {
-    it('initializes with default optimizer settings (0mm kerf, 500mm min offcut, 20% max wastage)', () => {
+    it('initializes with default optimizer settings (3mm kerf, 500mm min offcut, 20% max wastage)', () => {
       const settings = useCuttingSettingsStore.getState().settings;
       expect(settings.kerf_mm).toBe(DEFAULT_OPTIMIZER_SETTINGS.kerf_mm);
-      expect(settings.kerf_mm).toBe(0);
+      expect(settings.kerf_mm).toBe(3);
       expect(settings.min_offcut_mm).toBe(DEFAULT_OPTIMIZER_SETTINGS.min_offcut_mm);
       expect(settings.max_wastage_pct).toBe(DEFAULT_OPTIMIZER_SETTINGS.max_wastage_pct);
     });
@@ -30,7 +35,7 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
       expect(useCuttingSettingsStore.getState().settings.max_wastage_pct).toBe(20);
 
       store.resetSettings();
-      expect(useCuttingSettingsStore.getState().settings.kerf_mm).toBe(0);
+      expect(useCuttingSettingsStore.getState().settings.kerf_mm).toBe(3);
       expect(useCuttingSettingsStore.getState().settings.min_offcut_mm).toBe(500);
     });
   });
@@ -84,6 +89,156 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
     it('passes through other errors unchanged', () => {
       const msg = friendlyConfirmCutError('Network request failed');
       expect(msg).toBe('Network request failed');
+    });
+  });
+
+  describe('mergeCuttingQueueTasks', () => {
+    it('correctly merges multiple tasks for the same glass product', () => {
+      const task1: CuttingQueueTask = {
+        orderId: 'order-1',
+        orderIds: ['order-1'],
+        orderNo: 101,
+        orderNos: [101],
+        store: 'mumbai',
+        customerName: 'Customer A',
+        customerPhone: '1111111111',
+        productId: 'prod-clear-5',
+        productName: 'Clear Glass',
+        categoryName: 'Float Glass',
+        thicknessMm: 5,
+        color: null,
+        isLining: false,
+        totalPiecesCount: 2,
+        orderItems: [
+          {
+            orderItemId: 'oi-1',
+            orderId: 'order-1',
+            orderNo: 101,
+            customerName: 'Customer A',
+            widthMm: 400,
+            heightMm: 500,
+            qty: 2,
+            isPolished: false,
+          },
+        ],
+        ordersSummary: [
+          {
+            orderId: 'order-1',
+            orderNo: 101,
+            customerName: 'Customer A',
+            store: 'mumbai',
+            piecesCount: 2,
+          },
+        ],
+      };
+
+      const task2: CuttingQueueTask = {
+        orderId: 'order-2',
+        orderIds: ['order-2'],
+        orderNo: 102,
+        orderNos: [102],
+        store: 'mumbai',
+        customerName: 'Customer B',
+        customerPhone: '2222222222',
+        productId: 'prod-clear-5',
+        productName: 'Clear Glass',
+        categoryName: 'Float Glass',
+        thicknessMm: 5,
+        color: null,
+        isLining: false,
+        totalPiecesCount: 3,
+        orderItems: [
+          {
+            orderItemId: 'oi-2',
+            orderId: 'order-2',
+            orderNo: 102,
+            customerName: 'Customer B',
+            widthMm: 600,
+            heightMm: 800,
+            qty: 3,
+            isPolished: true,
+          },
+        ],
+        ordersSummary: [
+          {
+            orderId: 'order-2',
+            orderNo: 102,
+            customerName: 'Customer B',
+            store: 'mumbai',
+            piecesCount: 3,
+          },
+        ],
+      };
+
+      const merged = mergeCuttingQueueTasks([task1, task2]);
+
+      expect(merged.orderIds).toEqual(['order-1', 'order-2']);
+      expect(merged.orderNos).toEqual([101, 102]);
+      expect(merged.totalPiecesCount).toBe(5);
+      expect(merged.orderItems).toHaveLength(2);
+      expect(merged.ordersSummary).toHaveLength(2);
+      expect(merged.customerName).toContain('2 Orders');
+      expect(merged.customerName).toContain('#101, #102');
+    });
+
+    it('returns the same task unmodified if single task provided', () => {
+      const singleTask: CuttingQueueTask = {
+        orderId: 'order-1',
+        orderIds: ['order-1'],
+        orderNo: 101,
+        orderNos: [101],
+        store: 'mumbai',
+        customerName: 'Customer A',
+        customerPhone: '1111111111',
+        productId: 'prod-clear-5',
+        productName: 'Clear Glass',
+        categoryName: 'Float Glass',
+        thicknessMm: 5,
+        color: null,
+        isLining: false,
+        totalPiecesCount: 1,
+        orderItems: [],
+        ordersSummary: [],
+      };
+
+      const result = mergeCuttingQueueTasks([singleTask]);
+      expect(result).toBe(singleTask);
+    });
+  });
+
+  describe('findBestPlacementOnSheet', () => {
+    const sheet = { width_mm: 2000, height_mm: 1500 };
+    const kerf = 3;
+
+    it('places at (0, 0) when sheet is completely empty', () => {
+      const pos = findBestPlacementOnSheet(sheet, 400, 500, [], kerf);
+      expect(pos).toEqual({ x_mm: 0, y_mm: 0 });
+    });
+
+    it('places directly adjacent with kerf next to existing pieces without collision', () => {
+      const existing = [{ x_mm: 0, y_mm: 0, w_mm: 500, h_mm: 600 }];
+      const pos = findBestPlacementOnSheet(sheet, 400, 300, existing, kerf);
+
+      // Should place below existing at (0, 603) or to the right at (503, 0)
+      expect(pos.x_mm >= 503 || pos.y_mm >= 603).toBe(true);
+
+      // Verify no collision with existing
+      const hasOverlap = piecesOverlap(
+        { x_mm: pos.x_mm, y_mm: pos.y_mm, w_mm: 400, h_mm: 300 },
+        existing[0],
+        kerf,
+      );
+      expect(hasOverlap).toBe(false);
+    });
+
+    it('stays strictly inside sheet boundaries', () => {
+      const existing = [
+        { x_mm: 0, y_mm: 0, w_mm: 1200, h_mm: 1400 },
+      ];
+      // Piece of 700 width can fit to the right (1200 + 3 + 700 = 1903 <= 2000)
+      const pos = findBestPlacementOnSheet(sheet, 700, 400, existing, kerf);
+      expect(pos.x_mm + 700).toBeLessThanOrEqual(sheet.width_mm);
+      expect(pos.y_mm + 400).toBeLessThanOrEqual(sheet.height_mm);
     });
   });
 });

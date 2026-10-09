@@ -24,7 +24,9 @@ export interface CuttingSheet extends OptimizerSheet {
 
 export interface CuttingQueueTask {
   orderId: string;
+  orderIds: string[];
   orderNo: number;
+  orderNos: number[];
   store: string;
   customerName: string;
   customerPhone: string | null;
@@ -37,12 +39,22 @@ export interface CuttingQueueTask {
   totalPiecesCount: number;
   orderItems: {
     orderItemId: string;
+    orderId: string;
+    orderNo: number;
+    customerName: string;
     widthMm: number;
     heightMm: number;
     qty: number;
     isPolished?: boolean;
     finishedWidthMm?: number;
     finishedHeightMm?: number;
+  }[];
+  ordersSummary?: {
+    orderId: string;
+    orderNo: number;
+    customerName: string;
+    store: string;
+    piecesCount: number;
   }[];
 }
 

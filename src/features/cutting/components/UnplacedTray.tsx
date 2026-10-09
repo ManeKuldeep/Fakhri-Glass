@@ -6,11 +6,13 @@ import { CuttingPiece } from '../types';
 interface UnplacedTrayProps {
   pieces: CuttingPiece[];
   onPlacePieceOnCurrentSheet: (piece: CuttingPiece) => void;
+  onPlacePieceOnNextSheet?: (piece: CuttingPiece) => void;
 }
 
 export default function UnplacedTray({
   pieces,
   onPlacePieceOnCurrentSheet,
+  onPlacePieceOnNextSheet,
 }: UnplacedTrayProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -62,16 +64,31 @@ export default function UnplacedTray({
                 </Text>
               </View>
 
-              <Pressable
-                style={({ pressed }) => [
-                  styles.placeBtn,
-                  pressed && styles.placeBtnPressed,
-                ]}
-                onPress={() => onPlacePieceOnCurrentSheet(piece)}
-              >
-                <MaterialCommunityIcons name="plus" size={16} color="#FFFFFF" />
-                <Text style={styles.placeBtnText}>Place</Text>
-              </Pressable>
+              <View style={styles.actionsRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.placeBtn,
+                    pressed && styles.placeBtnPressed,
+                  ]}
+                  onPress={() => onPlacePieceOnCurrentSheet(piece)}
+                >
+                  <MaterialCommunityIcons name="plus" size={14} color="#FFFFFF" />
+                  <Text style={styles.placeBtnText}>This Sheet</Text>
+                </Pressable>
+
+                {onPlacePieceOnNextSheet ? (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.nextSheetBtn,
+                      pressed && styles.nextSheetBtnPressed,
+                    ]}
+                    onPress={() => onPlacePieceOnNextSheet(piece)}
+                  >
+                    <MaterialCommunityIcons name="arrow-right-bold" size={14} color="#FFFFFF" />
+                    <Text style={styles.placeBtnText}>Next</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           ))}
         </ScrollView>
@@ -120,7 +137,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CBD5E1',
     padding: 10,
-    width: 170,
+    width: 200,
     justifyContent: 'space-between',
   },
   pieceInfo: {
@@ -142,11 +159,16 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 2,
   },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
   placeBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: '#1A73E8',
     borderRadius: 6,
     paddingVertical: 6,
@@ -154,8 +176,21 @@ const styles = StyleSheet.create({
   placeBtnPressed: {
     backgroundColor: '#1557B0',
   },
+  nextSheetBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: '#0284C7',
+    borderRadius: 6,
+    paddingVertical: 6,
+  },
+  nextSheetBtnPressed: {
+    backgroundColor: '#0369A1',
+  },
   placeBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#FFFFFF',
   },

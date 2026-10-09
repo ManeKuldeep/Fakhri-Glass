@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import { useEffect } from 'react';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { Slot, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -13,18 +13,28 @@ import type { UserProfile } from '../src/stores/authStore';
 const queryClient = new QueryClient();
 
 /** Fetch the logged-in user's profile from the `profiles` table. */
-async function fetchProfile(userId: string): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, shop_id, full_name, assignment')
-    .eq('id', userId)
-    .single();
+async function fetchProfile(userId: string, retries = 2): Promise<UserProfile | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, shop_id, full_name, assignment')
+      .eq('id', userId)
+      .single();
 
-  if (error) {
+    if (!error) {
+      return data;
+    }
+
+    // Handle transient clock-skew timing (e.g. "JWT issued at future")
+    if (error.message?.toLowerCase().includes('future') && attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      continue;
+    }
+
     console.error('Failed to fetch profile:', error.message);
     return null;
   }
-  return data;
+  return null;
 }
 
 /**
@@ -36,9 +46,11 @@ function useProtectedRoute() {
   const isLoading = useAuthStore((s) => s.isLoading);
   const segments = useSegments();
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
 
   useEffect(() => {
-    if (isLoading) return;
+    // Wait until loading finishes and the root navigation tree is fully mounted
+    if (isLoading || !rootNavigationState?.key) return;
 
     const inAuthGroup = segments[0] === 'login';
 
@@ -49,7 +61,7 @@ function useProtectedRoute() {
       const landing = profile.assignment === 'cutter' ? '/(tabs)/cut' : '/(tabs)/orders';
       router.replace(landing);
     }
-  }, [profile, isLoading, segments, router]);
+  }, [profile, isLoading, segments, router, rootNavigationState?.key]);
 }
 
 export default function RootLayout() {

@@ -10,14 +10,16 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { packPieces } from '../../../optimizer/pack';
-import { piecesOverlap, isUsableOffcut } from '../../../optimizer/validation';
+import { piecesOverlap } from '../../../optimizer/validation';
 import { ResultOffcut, WastedRect, KerfCut } from '../../../optimizer/types';
+import { formatInches } from '../../inventory/utils';
 import { useCuttingSettingsStore } from '../stores/cuttingSettingsStore';
 import { useStockForProduct } from '../queries';
 import { useConfirmCutPlan, ConfirmOffcutInput } from '../mutations';
 import { supabase } from '../../../lib/supabase';
 import { printOrderLabels } from '../../labels/services';
 import { OrderWithItemsForLabels } from '../../labels/types';
+import { computeSheetLeftovers, findBestPlacementOnSheet } from '../utils';
 import {
   CuttingPiece,
   CuttingQueueTask,
@@ -61,9 +63,9 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
         list.push({
           id: `${oi.orderItemId}-${idx}`,
           order_item_id: oi.orderItemId,
-          order_id: task.orderId,
-          order_no: task.orderNo,
-          customer_name: task.customerName,
+          order_id: oi.orderId || task.orderId,
+          order_no: oi.orderNo || task.orderNo,
+          customer_name: oi.customerName || task.customerName,
           width_mm: oi.widthMm,
           height_mm: oi.heightMm,
           is_lining: task.isLining,
@@ -80,7 +82,13 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
     let availableSheets: CuttingSheet[] = [];
 
     if (stockItems && stockItems.length > 0) {
-      availableSheets = stockItems.map((s) => ({
+      // Prioritize offcuts first, then smaller area first
+      const sortedStock = [...stockItems].sort((a, b) => {
+        if (a.source === 'offcut' && b.source !== 'offcut') return -1;
+        if (a.source !== 'offcut' && b.source === 'offcut') return 1;
+        return a.width_mm * a.height_mm - b.width_mm * b.height_mm;
+      });
+      availableSheets = sortedStock.map((s) => ({
         ...s,
         is_lining: task.isLining,
       }));
@@ -116,7 +124,42 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
       }
     }
 
-    const result = packPieces(availableSheets, allOrderedPieces, settings);
+    let result = packPieces(availableSheets, allOrderedPieces, settings);
+
+    // If pieces still remain unplaced because more sheets are needed,
+    // automatically provision the necessary full sheet(s) from inventory
+    // so that 100% of ordered pieces are placed across the minimum required sheets.
+    let provisionAttempts = 0;
+    while (result.unplaced_pieces.length > 0 && provisionAttempts < 10) {
+      provisionAttempts++;
+      const defaultW = 2440;
+      const defaultH = 1830;
+      const { data: created, error } = await supabase
+        .from('stock_items')
+        .insert({
+          product_id: task.productId,
+          width_mm: defaultW,
+          height_mm: defaultH,
+          source: 'full',
+          status: 'available',
+          vertical_line_height_mm: task.isLining ? defaultH : null,
+        })
+        .select('id, width_mm, height_mm, source, status, vertical_line_height_mm')
+        .single();
+
+      if (error || !created) break;
+
+      const newSheet: CuttingSheet = {
+        id: created.id,
+        width_mm: created.width_mm,
+        height_mm: created.height_mm,
+        source: 'full',
+        is_lining: task.isLining,
+        vertical_line_height_mm: created.vertical_line_height_mm,
+      };
+      availableSheets.push(newSheet);
+      result = packPieces(availableSheets, allOrderedPieces, settings);
+    }
 
     const usedSheets: CuttingSheet[] = [];
     const initialPlacements: PlacedPiece[] = [];
@@ -142,6 +185,13 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
         }
       }
     }
+
+    // Ensure offcuts are placed first in workspace sheets so activeSheetIndex=0 shows the offcut sheet
+    usedSheets.sort((a, b) => {
+      if (a.source === 'offcut' && b.source !== 'offcut') return -1;
+      if (a.source !== 'offcut' && b.source === 'offcut') return 1;
+      return 0;
+    });
 
     if (usedSheets.length === 0 && availableSheets.length > 0) {
       usedSheets.push(availableSheets[0]);
@@ -249,16 +299,107 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
     });
   };
 
-  // Move piece to another sheet
+  // Add a sheet from available inventory (preferring offcuts first) or provision a new full sheet
+  const handleAddBlankSheet = async (): Promise<CuttingSheet | null> => {
+    try {
+      const usedSheetIds = new Set(sheets.map((s) => s.id));
+
+      // Prioritize unused offcut sheets from inventory first
+      const availableOffcut = stockItems?.find(
+        (s) => s.source === 'offcut' && !usedSheetIds.has(s.id),
+      );
+
+      if (availableOffcut) {
+        const newSheet: CuttingSheet = {
+          ...availableOffcut,
+          is_lining: task.isLining,
+        };
+        setSheets((prev) => [...prev, newSheet]);
+        setActiveSheetIndex(sheets.length);
+        return newSheet;
+      }
+
+      // Then check for unused full sheets in inventory
+      const availableUnused = stockItems?.find(
+        (s) => s.source === 'full' && !usedSheetIds.has(s.id),
+      );
+
+      if (availableUnused) {
+        const newSheet: CuttingSheet = {
+          ...availableUnused,
+          is_lining: task.isLining,
+        };
+        setSheets((prev) => [...prev, newSheet]);
+        setActiveSheetIndex(sheets.length);
+        return newSheet;
+      }
+
+      // Provision new full sheet in stock_items
+      const defaultW = 2440;
+      const defaultH = 1830;
+      const { data: created, error } = await supabase
+        .from('stock_items')
+        .insert({
+          product_id: task.productId,
+          width_mm: defaultW,
+          height_mm: defaultH,
+          source: 'full',
+          status: 'available',
+          vertical_line_height_mm: task.isLining ? defaultH : null,
+        })
+        .select('id, width_mm, height_mm, source, status, vertical_line_height_mm')
+        .single();
+
+      if (error || !created) {
+        throw new Error(`Failed to add sheet: ${error?.message ?? 'unknown error'}`);
+      }
+
+      const newSheet: CuttingSheet = {
+        id: created.id,
+        width_mm: created.width_mm,
+        height_mm: created.height_mm,
+        source: 'full',
+        is_lining: task.isLining,
+        vertical_line_height_mm: created.vertical_line_height_mm,
+      };
+
+      setSheets((prev) => [...prev, newSheet]);
+      setActiveSheetIndex(sheets.length);
+      return newSheet;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Alert.alert('Error', msg);
+      return null;
+    }
+  };
+
+  // Move piece to another sheet with collision-free placement
   const handleMoveToSheet = (pieceId: string, targetSheetId: string) => {
+    const targetSheet = sheets.find((s) => s.id === targetSheetId);
+    if (!targetSheet) return;
+
+    const targetPiece = placements.find((p) => p.id === pieceId);
+    if (!targetPiece) return;
+
+    const existingOnTarget = placements.filter(
+      (p) => p.stock_item_id === targetSheetId && p.id !== pieceId,
+    );
+    const bestPos = findBestPlacementOnSheet(
+      targetSheet,
+      targetPiece.w_mm,
+      targetPiece.h_mm,
+      existingOnTarget,
+      settings.kerf_mm,
+    );
+
     setPlacements((prev) => {
       const updated = prev.map((p) => {
         if (p.id === pieceId) {
           return {
             ...p,
             stock_item_id: targetSheetId,
-            x_mm: 0,
-            y_mm: 0,
+            x_mm: bestPos.x_mm,
+            y_mm: bestPos.y_mm,
           };
         }
         return p;
@@ -271,6 +412,55 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
     if (targetIdx >= 0) {
       setActiveSheetIndex(targetIdx);
     }
+  };
+
+  // Move / stash a placed piece to the next sheet directly
+  const handleMovePieceToNextSheet = async (pieceId: string) => {
+    const piece = placements.find((p) => p.id === pieceId);
+    if (!piece) return;
+
+    const currentSheetIdx = sheets.findIndex((s) => s.id === piece.stock_item_id);
+    if (currentSheetIdx === -1) return;
+
+    let targetSheet: CuttingSheet | null = null;
+    let targetIdx = currentSheetIdx + 1;
+
+    if (targetIdx < sheets.length) {
+      targetSheet = sheets[targetIdx];
+    } else {
+      targetSheet = await handleAddBlankSheet();
+      targetIdx = sheets.length;
+    }
+
+    if (!targetSheet) return;
+
+    const existingOnTarget = placements.filter(
+      (p) => p.stock_item_id === targetSheet!.id && p.id !== pieceId,
+    );
+    const bestPos = findBestPlacementOnSheet(
+      targetSheet,
+      piece.w_mm,
+      piece.h_mm,
+      existingOnTarget,
+      settings.kerf_mm,
+    );
+
+    setPlacements((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === pieceId) {
+          return {
+            ...p,
+            stock_item_id: targetSheet!.id,
+            x_mm: bestPos.x_mm,
+            y_mm: bestPos.y_mm,
+          };
+        }
+        return p;
+      });
+      return checkCollisions(targetSheet!.id, updated);
+    });
+
+    setActiveSheetIndex(targetIdx);
   };
 
   // Remove piece from sheet back to unplaced tray
@@ -294,28 +484,19 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
     if (!activeSheet) return;
 
     const existing = placements.filter((p) => p.stock_item_id === activeSheet.id);
-    let nextX = 0;
-    let nextY = 0;
-
-    if (existing.length > 0) {
-      const last = existing[existing.length - 1];
-      if (last.y_mm + last.h_mm + settings.kerf_mm + piece.height_mm <= activeSheet.height_mm) {
-        nextX = last.x_mm;
-        nextY = last.y_mm + last.h_mm + settings.kerf_mm;
-      } else if (
-        last.x_mm + last.w_mm + settings.kerf_mm + piece.width_mm <=
-        activeSheet.width_mm
-      ) {
-        nextX = last.x_mm + last.w_mm + settings.kerf_mm;
-        nextY = 0;
-      }
-    }
+    const bestPos = findBestPlacementOnSheet(
+      activeSheet,
+      piece.width_mm,
+      piece.height_mm,
+      existing,
+      settings.kerf_mm,
+    );
 
     const newPlacedPiece: PlacedPiece = {
       ...piece,
       stock_item_id: activeSheet.id,
-      x_mm: nextX,
-      y_mm: nextY,
+      x_mm: bestPos.x_mm,
+      y_mm: bestPos.y_mm,
       w_mm: piece.width_mm,
       h_mm: piece.height_mm,
       rotated: false,
@@ -325,158 +506,66 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
     setPlacements((prev) => checkCollisions(activeSheet.id, [...prev, newPlacedPiece]));
   };
 
-  // Add a blank full sheet backed by database row
-  const handleAddBlankSheet = async () => {
-    try {
-      const usedSheetIds = new Set(sheets.map((s) => s.id));
-      const availableUnused = stockItems?.find(
-        (s) => s.source === 'full' && !usedSheetIds.has(s.id),
-      );
+  // Place piece from unplaced tray directly onto next sheet
+  const handlePlacePieceOnNextSheet = async (piece: CuttingPiece) => {
+    let targetIdx = activeSheetIndex + 1;
+    let targetSheet: CuttingSheet | null = null;
 
-      if (availableUnused) {
-        const newSheet: CuttingSheet = {
-          ...availableUnused,
-          is_lining: task.isLining,
-        };
-        setSheets((prev) => [...prev, newSheet]);
-        setActiveSheetIndex(sheets.length);
-        return;
-      }
-
-      // Provision new full sheet in stock_items
-      const defaultW = 2440;
-      const defaultH = 1830;
-      const { data: created, error } = await supabase
-        .from('stock_items')
-        .insert({
-          product_id: task.productId,
-          width_mm: defaultW,
-          height_mm: defaultH,
-          source: 'full',
-          status: 'available',
-          vertical_line_height_mm: task.isLining ? defaultH : null,
-        })
-        .select('id, width_mm, height_mm, source, status, vertical_line_height_mm')
-        .single();
-
-      if (error) {
-        throw new Error(`Failed to add sheet: ${error.message}`);
-      }
-
-      const newSheet: CuttingSheet = {
-        id: created.id,
-        width_mm: created.width_mm,
-        height_mm: created.height_mm,
-        source: 'full',
-        is_lining: task.isLining,
-        vertical_line_height_mm: created.vertical_line_height_mm,
-      };
-
-      setSheets((prev) => [...prev, newSheet]);
-      setActiveSheetIndex(sheets.length);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Error', msg);
+    if (targetIdx < sheets.length) {
+      targetSheet = sheets[targetIdx];
+    } else {
+      targetSheet = await handleAddBlankSheet();
+      targetIdx = sheets.length;
     }
+
+    if (!targetSheet) return;
+
+    const existingOnTarget = placements.filter((p) => p.stock_item_id === targetSheet!.id);
+    const bestPos = findBestPlacementOnSheet(
+      targetSheet,
+      piece.width_mm,
+      piece.height_mm,
+      existingOnTarget,
+      settings.kerf_mm,
+    );
+
+    const newPlacedPiece: PlacedPiece = {
+      ...piece,
+      stock_item_id: targetSheet.id,
+      x_mm: bestPos.x_mm,
+      y_mm: bestPos.y_mm,
+      w_mm: piece.width_mm,
+      h_mm: piece.height_mm,
+      rotated: false,
+    };
+
+    setUnplacedPieces((prev) => prev.filter((p) => p.id !== piece.id));
+    setPlacements((prev) => checkCollisions(targetSheet!.id, [...prev, newPlacedPiece]));
+    setActiveSheetIndex(targetIdx);
   };
 
   // Live wastage and leftover calculation for the active sheet
-  const { liveWastePct, liveOffcuts, liveWastedRects, liveKerfCuts } = useMemo(() => {
+  const {
+    liveWastePct,
+    offcuts: liveOffcuts,
+    wastedRects: liveWastedRects,
+    kerfCuts: liveKerfCuts,
+  } = useMemo(() => {
     if (!activeSheet) {
       return {
         liveWastePct: 0,
-        liveOffcuts: [] as ResultOffcut[],
-        liveWastedRects: [] as WastedRect[],
-        liveKerfCuts: [] as KerfCut[],
+        offcuts: [] as ResultOffcut[],
+        wastedRects: [] as WastedRect[],
+        kerfCuts: [] as KerfCut[],
       };
     }
 
-    const totalSheetArea = activeSheet.width_mm * activeSheet.height_mm;
-    const pieceArea = activePlacements.reduce((sum, p) => sum + p.w_mm * p.h_mm, 0);
-
-    const offcuts: ResultOffcut[] = [];
-    const wasted: WastedRect[] = [];
-    const kerfCuts: KerfCut[] = [];
-
-    if (activePlacements.length > 0 && totalSheetArea > 0) {
-      const maxX = Math.max(...activePlacements.map((p) => p.x_mm + p.w_mm));
-      const maxY = Math.max(...activePlacements.map((p) => p.y_mm + p.h_mm));
-
-      // Right leftover strip
-      const rightW = activeSheet.width_mm - maxX - settings.kerf_mm;
-      if (rightW > 0) {
-        kerfCuts.push({
-          x_mm: maxX,
-          y_mm: 0,
-          width_mm: settings.kerf_mm,
-          height_mm: activeSheet.height_mm,
-          orientation: 'vertical',
-        });
-        if (isUsableOffcut(rightW, activeSheet.height_mm, settings.min_offcut_mm)) {
-          offcuts.push({
-            id: `${activeSheet.id}-right-offcut`,
-            parent_id: activeSheet.id,
-            x_mm: maxX + settings.kerf_mm,
-            y_mm: 0,
-            width_mm: rightW,
-            height_mm: activeSheet.height_mm,
-          });
-        } else {
-          wasted.push({
-            x_mm: maxX + settings.kerf_mm,
-            y_mm: 0,
-            width_mm: rightW,
-            height_mm: activeSheet.height_mm,
-          });
-        }
-      }
-
-      // Top leftover strip (above placed block)
-      const topH = activeSheet.height_mm - maxY - settings.kerf_mm;
-      if (topH > 0 && maxX > 0) {
-        kerfCuts.push({
-          x_mm: 0,
-          y_mm: maxY,
-          width_mm: maxX,
-          height_mm: settings.kerf_mm,
-          orientation: 'horizontal',
-        });
-        if (isUsableOffcut(maxX, topH, settings.min_offcut_mm)) {
-          offcuts.push({
-            id: `${activeSheet.id}-top-offcut`,
-            parent_id: activeSheet.id,
-            x_mm: 0,
-            y_mm: maxY + settings.kerf_mm,
-            width_mm: maxX,
-            height_mm: topH,
-          });
-        } else {
-          wasted.push({
-            x_mm: 0,
-            y_mm: maxY + settings.kerf_mm,
-            width_mm: maxX,
-            height_mm: topH,
-          });
-        }
-      }
-    }
-
-    const pureWasteArea =
-      totalSheetArea -
-      pieceArea -
-      offcuts.reduce((sum, o) => sum + o.width_mm * o.height_mm, 0);
-
-    const wastePct =
-      totalSheetArea > 0
-        ? Number(((Math.max(0, pureWasteArea) / totalSheetArea) * 100).toFixed(1))
-        : 0;
-
-    return {
-      liveWastePct: wastePct,
-      liveOffcuts: offcuts,
-      liveWastedRects: wasted,
-      liveKerfCuts: kerfCuts,
-    };
+    return computeSheetLeftovers(
+      activeSheet,
+      activePlacements,
+      settings.kerf_mm,
+      settings.min_offcut_mm,
+    );
   }, [activeSheet, activePlacements, settings]);
 
   const hasAnyCollisions = placements.some((p) => p.hasCollision);
@@ -518,38 +607,36 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
       const piecesOnSheet = placements.filter((p) => p.stock_item_id === sId);
       if (piecesOnSheet.length === 0) continue;
 
-      const maxX = Math.max(...piecesOnSheet.map((p) => p.x_mm + p.w_mm));
-      const maxY = Math.max(...piecesOnSheet.map((p) => p.y_mm + p.h_mm));
+      const leftovers = computeSheetLeftovers(
+        s,
+        piecesOnSheet,
+        settings.kerf_mm,
+        settings.min_offcut_mm,
+      );
 
-      // Right leftover strip
-      const rightW = s.width_mm - maxX - settings.kerf_mm;
-      if (rightW > 0 && isUsableOffcut(rightW, s.height_mm, settings.min_offcut_mm)) {
+      for (const off of leftovers.offcuts) {
         allOffcuts.push({
           parent_id: s.id,
-          width_mm: rightW,
-          height_mm: s.height_mm,
-        });
-      }
-
-      // Top leftover strip
-      const topH = s.height_mm - maxY - settings.kerf_mm;
-      if (topH > 0 && maxX > 0 && isUsableOffcut(maxX, topH, settings.min_offcut_mm)) {
-        allOffcuts.push({
-          parent_id: s.id,
-          width_mm: maxX,
-          height_mm: topH,
+          width_mm: off.width_mm,
+          height_mm: off.height_mm,
         });
       }
     }
 
     // 3. Confirmation Dialog
+    const orderIds = task.orderIds && task.orderIds.length > 0 ? task.orderIds : [task.orderId];
+    const orderTitle =
+      task.orderNos && task.orderNos.length > 1
+        ? `${task.orderNos.length} Orders (${task.orderNos.map((n) => `#${n}`).join(', ')})`
+        : `Order #${task.orderNo}`;
+
     Alert.alert(
       'Confirm Cut Plan',
-      `Confirm cutting plan for Order #${task.orderNo}?\n\n` +
+      `Confirm cutting plan for ${orderTitle}?\n\n` +
         `• Pieces to cut: ${placements.length}\n` +
         `• Sheets consumed: ${usedSheetIds.length}\n` +
         `• Offcuts created: ${allOffcuts.length}\n\n` +
-        `This will deduct stock, record movements, and update the order status.`,
+        `This will deduct stock, record movements, and update the status for all included orders.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -558,7 +645,7 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
           onPress: () => {
             confirmMutation.mutate(
               {
-                orderId: task.orderId,
+                orderIds,
                 productId: task.productId,
                 kerfMm: settings.kerf_mm,
                 maxWastagePct: settings.max_wastage_pct,
@@ -577,34 +664,53 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
                 onSuccess: () => {
                   Alert.alert(
                     'Cut Plan Confirmed!',
-                    `Order #${task.orderNo} plan confirmed. Stock has been deducted and offcuts added to inventory.\n\nPrint piece labels now?`,
+                    `${orderTitle} plan confirmed. Stock has been deducted and offcuts added to inventory.\n\nPrint piece labels now?`,
                     [
                       {
                         text: 'Print Labels',
                         onPress: async () => {
                           try {
-                            const orderForLabels: OrderWithItemsForLabels = {
-                              id: task.orderId,
-                              order_no: task.orderNo,
-                              store: task.store,
-                              customer: {
-                                name: task.customerName,
-                                phone: task.customerPhone,
-                              },
-                              order_items: task.orderItems.map((oi) => ({
-                                id: oi.orderItemId,
-                                width_mm: oi.finishedWidthMm ?? oi.widthMm,
-                                height_mm: oi.finishedHeightMm ?? oi.heightMm,
-                                qty: oi.qty,
-                                is_polished: oi.isPolished,
-                                product: {
-                                  name: task.productName,
-                                  thickness_mm: task.thicknessMm,
-                                  color: task.color,
+                            const summaries =
+                              task.ordersSummary && task.ordersSummary.length > 0
+                                ? task.ordersSummary
+                                : [
+                                    {
+                                      orderId: task.orderId,
+                                      orderNo: task.orderNo,
+                                      customerName: task.customerName,
+                                      store: task.store,
+                                      piecesCount: task.totalPiecesCount,
+                                    },
+                                  ];
+
+                            for (const s of summaries) {
+                              const itemsForOrder = task.orderItems.filter(
+                                (oi) => (oi.orderId || task.orderId) === s.orderId,
+                              );
+                              if (itemsForOrder.length === 0) continue;
+                              const orderForLabels: OrderWithItemsForLabels = {
+                                id: s.orderId,
+                                order_no: s.orderNo,
+                                store: s.store,
+                                customer: {
+                                  name: s.customerName,
+                                  phone: task.customerPhone || '',
                                 },
-                              })),
-                            };
-                            await printOrderLabels(orderForLabels);
+                                order_items: itemsForOrder.map((oi) => ({
+                                  id: oi.orderItemId,
+                                  width_mm: oi.finishedWidthMm ?? oi.widthMm,
+                                  height_mm: oi.finishedHeightMm ?? oi.heightMm,
+                                  qty: oi.qty,
+                                  is_polished: oi.isPolished,
+                                  product: {
+                                    name: task.productName,
+                                    thickness_mm: task.thicknessMm,
+                                    color: task.color,
+                                  },
+                                })),
+                              };
+                              await printOrderLabels(orderForLabels);
+                            }
                           } catch (err: unknown) {
                             const msg = err instanceof Error ? err.message : String(err);
                             Alert.alert('Label Printing Failed', msg);
@@ -640,8 +746,14 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
 
         <View style={styles.headerTitleArea}>
           <View style={styles.orderBadgeRow}>
-            <Text style={styles.orderNoText}>Order #{task.orderNo}</Text>
-            <Text style={styles.customerText}>· {task.customerName}</Text>
+            <Text style={styles.orderNoText}>
+              {task.orderNos && task.orderNos.length > 1
+                ? `${task.orderNos.length} Orders (${task.orderNos.map((n) => `#${n}`).join(', ')})`
+                : `Order #${task.orderNo}`}
+            </Text>
+            <Text style={styles.customerText} numberOfLines={1}>
+              · {task.orderNos && task.orderNos.length > 1 ? 'Combined Cut Layout' : task.customerName}
+            </Text>
           </View>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {task.productName} ({task.thicknessMm} mm)
@@ -715,6 +827,28 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
         onAddBlankSheet={handleAddBlankSheet}
       />
 
+      {/* Remaining Offcut Dimensions Summary Banner */}
+      {liveOffcuts.length > 0 && (
+        <View style={styles.offcutBanner}>
+          <View style={styles.offcutBannerLeft}>
+            <MaterialCommunityIcons name="shape-outline" size={16} color="#047857" />
+            <Text style={styles.offcutBannerTitle}>Remaining Offcut:</Text>
+          </View>
+          <View style={styles.offcutPillsWrap}>
+            {liveOffcuts.map((o, idx) => (
+              <View key={o.id || idx} style={styles.offcutBannerPill}>
+                <Text style={styles.offcutBannerPillText}>
+                  {o.width_mm} × {o.height_mm} mm
+                </Text>
+                <Text style={styles.offcutBannerPillSub}>
+                  ({formatInches(o.width_mm)} × {formatInches(o.height_mm)})
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       {/* Canvas Area */}
       {isStockLoading ? (
         <View style={styles.loadingArea}>
@@ -733,6 +867,7 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
           onUpdatePosition={handleUpdatePosition}
           onRotatePiece={handleRotatePiece}
           onMoveToSheet={handleMoveToSheet}
+          onMoveToNextSheet={handleMovePieceToNextSheet}
           onRemoveToTray={handleRemoveToTray}
         />
       ) : (
@@ -745,6 +880,7 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
       <UnplacedTray
         pieces={unplacedPieces}
         onPlacePieceOnCurrentSheet={handlePlaceFromTray}
+        onPlacePieceOnNextSheet={handlePlacePieceOnNextSheet}
       />
 
       {/* Action Footer */}
@@ -902,6 +1038,54 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#991B1B',
+  },
+  offcutBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#ECFDF5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#A7F3D0',
+  },
+  offcutBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  offcutBannerTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  offcutPillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    alignItems: 'center',
+  },
+  offcutBannerPill: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  offcutBannerPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  offcutBannerPillSub: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#047857',
   },
   loadingArea: {
     flex: 1,

@@ -30,7 +30,7 @@ export interface OptimizerSettings {
 }
 
 export const DEFAULT_OPTIMIZER_SETTINGS: OptimizerSettings = {
-  kerf_mm: 0,
+  kerf_mm: 3,
   min_offcut_mm: 500,
   max_wastage_pct: 20,
 };

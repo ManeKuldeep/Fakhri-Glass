@@ -649,6 +649,17 @@ export type Database = {
     Functions: {
       auth_shop_id: { Args: never; Returns: string }
       cancel_order: { Args: { p_order_id: string }; Returns: Json }
+      confirm_batch_cut_plan: {
+        Args: {
+          p_kerf_mm: number
+          p_max_wastage_pct: number
+          p_offcuts: Json
+          p_order_ids: string[]
+          p_pieces: Json
+          p_product_id: string
+        }
+        Returns: string[]
+      }
       confirm_cut_plan: {
         Args: {
           p_kerf_mm: number

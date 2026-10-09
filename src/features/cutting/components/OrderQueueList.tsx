@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -10,7 +11,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STORES } from '../../../constants/stores';
 import { useAuthStore } from '../../../stores/authStore';
-import { useCuttingQueue } from '../queries';
+import { mergeCuttingQueueTasks, useCuttingQueue } from '../queries';
 import { CuttingQueueTask } from '../types';
 
 interface OrderQueueListProps {
@@ -30,14 +31,115 @@ export default function OrderQueueList({
       : undefined;
 
   const [storeFilter, setStoreFilter] = useState<string | undefined>(defaultStore);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 
   const { data: queue, isLoading, error, refetch } = useCuttingQueue(storeFilter);
 
+  const selectedTasks = useMemo(() => {
+    if (!queue || selectedKeys.length === 0) return [];
+    const keySet = new Set(selectedKeys);
+    return queue.filter((t) => keySet.has(`${t.orderId}:${t.productId}`));
+  }, [queue, selectedKeys]);
+
+  const selectedProductId = selectedTasks[0]?.productId;
+  const totalSelectedPieces = useMemo(
+    () => selectedTasks.reduce((sum, t) => sum + t.totalPiecesCount, 0),
+    [selectedTasks],
+  );
+
+  // Identify product groups that have 2 or more pending orders that can be space-optimised together
+  const combinableGroups = useMemo(() => {
+    if (!queue) return [];
+    const map = new Map<string, CuttingQueueTask[]>();
+    for (const t of queue) {
+      const arr = map.get(t.productId) ?? [];
+      arr.push(t);
+      map.set(t.productId, arr);
+    }
+    const result: Array<{
+      productId: string;
+      productName: string;
+      tasks: CuttingQueueTask[];
+      totalPieces: number;
+    }> = [];
+    for (const [productId, tasks] of map.entries()) {
+      if (tasks.length > 1) {
+        result.push({
+          productId,
+          productName: tasks[0].productName,
+          tasks,
+          totalPieces: tasks.reduce((sum, t) => sum + t.totalPiecesCount, 0),
+        });
+      }
+    }
+    return result;
+  }, [queue]);
+
+  const allCompatibleKeys = useMemo(() => {
+    if (!selectedProductId || !queue) return [];
+    return queue
+      .filter((t) => t.productId === selectedProductId)
+      .map((t) => `${t.orderId}:${t.productId}`);
+  }, [selectedProductId, queue]);
+
+  const allCompatibleSelected =
+    allCompatibleKeys.length > 0 && selectedKeys.length === allCompatibleKeys.length;
+
+  const toggleSelectTask = (task: CuttingQueueTask) => {
+    const key = `${task.orderId}:${task.productId}`;
+    if (selectedKeys.includes(key)) {
+      setSelectedKeys((prev) => prev.filter((k) => k !== key));
+      return;
+    }
+
+    if (selectedTasks.length > 0 && selectedProductId && selectedProductId !== task.productId) {
+      Alert.alert(
+        'Different Glass Product',
+        `You can only combine orders of the same glass product (${selectedTasks[0].productName}) on the same sheet. Clear current selection to choose this product instead?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Select This Product',
+            onPress: () => setSelectedKeys([key]),
+          },
+        ],
+      );
+      return;
+    }
+
+    setSelectedKeys((prev) => [...prev, key]);
+  };
+
+  const handleLaunchCombined = () => {
+    if (selectedTasks.length === 0) return;
+    const merged = mergeCuttingQueueTasks(selectedTasks);
+    onSelectTask(merged);
+  };
+
   const renderTaskCard = ({ item }: { item: CuttingQueueTask }) => {
+    const key = `${item.orderId}:${item.productId}`;
+    const isSelected = selectedKeys.includes(key);
+    const isCompatible = !selectedProductId || selectedProductId === item.productId;
+
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, isSelected && styles.cardSelected]}>
         <View style={styles.cardHeader}>
-          <View style={styles.titleArea}>
+          <Pressable
+            style={styles.checkboxContainer}
+            onPress={() => toggleSelectTask(item)}
+            hitSlop={8}
+          >
+            <MaterialCommunityIcons
+              name={isSelected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+              size={24}
+              color={isSelected ? '#1A73E8' : isCompatible ? '#94A3B8' : '#E2E8F0'}
+            />
+          </Pressable>
+
+          <Pressable
+            style={styles.titleArea}
+            onPress={() => toggleSelectTask(item)}
+          >
             <View style={styles.orderBadgeRow}>
               <Text style={styles.orderNoBadge}>Order #{item.orderNo}</Text>
               <View style={styles.storeBadge}>
@@ -53,7 +155,7 @@ export default function OrderQueueList({
               {item.categoryName} · {item.thicknessMm} mm
               {item.color ? ` · ${item.color}` : ''}
             </Text>
-          </View>
+          </Pressable>
 
           {item.isLining ? (
             <View style={styles.liningBadge}>
@@ -105,6 +207,48 @@ export default function OrderQueueList({
     );
   };
 
+  const renderListHeader = () => {
+    if (combinableGroups.length === 0) return null;
+    return (
+      <View style={styles.bannerContainer}>
+        {combinableGroups.map((group) => (
+          <View key={group.productId} style={styles.batchBanner}>
+            <View style={styles.batchBannerHeader}>
+              <View style={styles.batchIconWrapper}>
+                <MaterialCommunityIcons
+                  name="view-dashboard-variant-outline"
+                  size={20}
+                  color="#1A73E8"
+                />
+              </View>
+              <View style={styles.batchBannerText}>
+                <Text style={styles.batchBannerTitle}>All Orders Space Optimiser</Text>
+                <Text style={styles.batchBannerSubtitle}>
+                  {group.tasks.length} orders · {group.totalPieces} pieces · {group.productName}
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.batchBannerBtn,
+                pressed && styles.batchBannerBtnPressed,
+              ]}
+              onPress={() => {
+                const merged = mergeCuttingQueueTasks(group.tasks);
+                onSelectTask(merged);
+              }}
+            >
+              <MaterialCommunityIcons name="content-cut" size={15} color="#FFFFFF" />
+              <Text style={styles.batchBannerBtnText}>
+                Visualise All ({group.tasks.length})
+              </Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Top Bar with Filter & Settings */}
@@ -112,7 +256,10 @@ export default function OrderQueueList({
         <View style={styles.filterRow}>
           <Pressable
             style={[styles.filterChip, !storeFilter && styles.filterChipActive]}
-            onPress={() => setStoreFilter(undefined)}
+            onPress={() => {
+              setStoreFilter(undefined);
+              setSelectedKeys([]);
+            }}
           >
             <Text
               style={[
@@ -131,7 +278,10 @@ export default function OrderQueueList({
                 styles.filterChip,
                 storeFilter === s.value && styles.filterChipActive,
               ]}
-              onPress={() => setStoreFilter(s.value)}
+              onPress={() => {
+                setStoreFilter(s.value);
+                setSelectedKeys([]);
+              }}
             >
               <Text
                 style={[
@@ -169,7 +319,11 @@ export default function OrderQueueList({
           data={queue}
           keyExtractor={(item) => `${item.orderId}:${item.productId}`}
           renderItem={renderTaskCard}
-          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={renderListHeader}
+          contentContainerStyle={[
+            styles.listContent,
+            selectedTasks.length > 0 && styles.listContentWithBottomBar,
+          ]}
         />
       ) : (
         <View style={styles.centered}>
@@ -178,6 +332,60 @@ export default function OrderQueueList({
           <Text style={styles.emptySubtext}>
             There are no pending items waiting to be cut.
           </Text>
+        </View>
+      )}
+
+      {/* Floating Bottom Bar when 1 or more tasks selected */}
+      {selectedTasks.length > 0 && (
+        <View style={styles.floatingBottomBar}>
+          <View style={styles.floatingBarInfo}>
+            <Text style={styles.floatingBarTitle}>
+              {selectedTasks.length} {selectedTasks.length === 1 ? 'Order' : 'Orders'} Selected
+            </Text>
+            <Text style={styles.floatingBarSubtitle}>
+              {totalSelectedPieces} {totalSelectedPieces === 1 ? 'piece' : 'pieces'} ·{' '}
+              {selectedTasks[0].productName}
+            </Text>
+          </View>
+
+          <View style={styles.floatingBarActions}>
+            <Pressable
+              style={styles.floatingClearBtn}
+              onPress={() => setSelectedKeys([])}
+            >
+              <Text style={styles.floatingClearText}>Clear</Text>
+            </Pressable>
+
+            {allCompatibleKeys.length > 1 && (
+              <Pressable
+                style={styles.floatingSelectAllBtn}
+                onPress={() => {
+                  if (allCompatibleSelected) {
+                    setSelectedKeys([]);
+                  } else {
+                    setSelectedKeys(allCompatibleKeys);
+                  }
+                }}
+              >
+                <Text style={styles.floatingSelectAllText}>
+                  {allCompatibleSelected ? 'Deselect' : 'Select All'}
+                </Text>
+              </Pressable>
+            )}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.floatingCutBtn,
+                pressed && styles.floatingCutBtnPressed,
+              ]}
+              onPress={handleLaunchCombined}
+            >
+              <MaterialCommunityIcons name="content-cut" size={18} color="#FFFFFF" />
+              <Text style={styles.floatingCutText}>
+                {selectedTasks.length > 1 ? 'Cut Together' : 'Open Layout'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       )}
     </View>
@@ -230,12 +438,15 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
+  listContentWithBottomBar: {
+    paddingBottom: 110,
+  },
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
@@ -243,11 +454,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  cardSelected: {
+    borderColor: '#1A73E8',
+    backgroundColor: '#F8FAFC',
+    shadowColor: '#1A73E8',
+    shadowOpacity: 0.15,
+  },
   cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
+  },
+  checkboxContainer: {
+    marginRight: 10,
+    marginTop: 2,
   },
   titleArea: {
     flex: 1,
@@ -403,5 +623,143 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 4,
     textAlign: 'center',
+  },
+  floatingBottomBar: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  floatingBarInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  floatingBarTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  floatingBarSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  floatingBarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  floatingClearBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  floatingClearText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  floatingCutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#1A73E8',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  floatingCutBtnPressed: {
+    backgroundColor: '#1557B0',
+  },
+  floatingCutText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  floatingSelectAllBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+  },
+  floatingSelectAllText: {
+    color: '#93C5FD',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bannerContainer: {
+    marginBottom: 8,
+  },
+  batchBanner: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#1A73E8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  batchBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  batchIconWrapper: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  batchBannerText: {
+    flex: 1,
+  },
+  batchBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E3A8A',
+  },
+  batchBannerSubtitle: {
+    fontSize: 12,
+    color: '#3B82F6',
+    marginTop: 2,
+  },
+  batchBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#1A73E8',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  batchBannerBtnPressed: {
+    backgroundColor: '#1557B0',
+  },
+  batchBannerBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

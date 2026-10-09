@@ -23,7 +23,7 @@ export interface ConfirmOffcutInput {
 }
 
 export interface ConfirmCutPlanInput {
-  orderId: string;
+  orderIds: string[];
   productId: string;
   kerfMm: number;
   maxWastagePct: number;
@@ -36,8 +36,8 @@ export function useConfirmCutPlan() {
 
   return useMutation({
     mutationFn: async (input: ConfirmCutPlanInput) => {
-      const { data, error } = await supabase.rpc('confirm_cut_plan', {
-        p_order_id: input.orderId,
+      const { data, error } = await supabase.rpc('confirm_batch_cut_plan', {
+        p_order_ids: input.orderIds,
         p_product_id: input.productId,
         p_kerf_mm: input.kerfMm,
         p_max_wastage_pct: input.maxWastagePct,
@@ -49,7 +49,7 @@ export function useConfirmCutPlan() {
         throw new Error(friendlyConfirmCutError(error.message));
       }
 
-      return data as string; // returns plan_id uuid
+      return data as string[]; // returns plan_ids uuid[]
     },
     onSuccess: () => {
       // Invalidate relevant queries so Orders, Inventory, and Cutting immediately update

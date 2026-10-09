@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View, Pressable, Modal } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -16,12 +15,10 @@ interface InteractivePieceProps {
   originX: number;
   originY: number;
   kerfMm: number;
-  allSheets: CuttingSheet[];
   otherPiecesOnSheet: PlacedPiece[];
+  isSelected: boolean;
+  onSelect: () => void;
   onUpdatePosition: (pieceId: string, x_mm: number, y_mm: number) => void;
-  onRotatePiece: (pieceId: string) => void;
-  onMoveToSheet: (pieceId: string, targetSheetId: string) => void;
-  onRemoveToTray: (pieceId: string) => void;
 }
 
 export default function InteractivePiece({
@@ -31,21 +28,16 @@ export default function InteractivePiece({
   originX,
   originY,
   kerfMm,
-  allSheets,
   otherPiecesOnSheet,
+  isSelected,
+  onSelect,
   onUpdatePosition,
-  onRotatePiece,
-  onMoveToSheet,
-  onRemoveToTray,
 }: InteractivePieceProps) {
-  const [selected, setSelected] = useState(false);
-  const [moveModalVisible, setMoveModalVisible] = useState(false);
-
   // Position offsets during dragging
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
 
-  // Check if lining (strictly forbids rotation)
+  // Check if lining
   const isLining = (piece.is_lining ?? false) || (sheet.is_lining ?? false);
 
   function handleDragEnd(dx: number, dy: number) {
@@ -102,6 +94,7 @@ export default function InteractivePiece({
   }
 
   const panGesture = Gesture.Pan()
+    .minDistance(6)
     .onUpdate((event) => {
       translateX.value = event.translationX;
       translateY.value = event.translationY;
@@ -110,9 +103,13 @@ export default function InteractivePiece({
       runOnJS(handleDragEnd)(event.translationX, event.translationY);
     });
 
-  const tapGesture = Gesture.Tap().onEnd(() => {
-    runOnJS(setSelected)(!selected);
-  });
+  const tapGesture = Gesture.Tap()
+    .maxDuration(350)
+    .onEnd(() => {
+      runOnJS(onSelect)();
+    });
+
+  const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -131,152 +128,56 @@ export default function InteractivePiece({
   const hasCollision = piece.hasCollision;
 
   return (
-    <>
-      <GestureDetector gesture={Gesture.Race(panGesture, tapGesture)}>
-        <Animated.View
-          style={[
-            styles.pieceBox,
-            {
-              left: pxX,
-              top: pxY,
-              width: pxW,
-              height: pxH,
-            },
-            hasCollision && styles.collisionBox,
-            selected && styles.selectedBox,
-            animatedStyle,
-          ]}
-        >
-          {/* Piece Content */}
-          <View style={styles.innerContent}>
-            <View style={styles.topRow}>
-              <Text
-                style={[
-                  styles.orderNumber,
-                  hasCollision && styles.collisionText,
-                  selected && styles.selectedText,
-                ]}
-                numberOfLines={1}
-              >
-                #{piece.order_no} ({piece.piece_index}/{piece.total_qty})
-              </Text>
-              {hasCollision ? (
-                <MaterialCommunityIcons name="alert" size={14} color="#EF4444" />
-              ) : null}
-            </View>
-
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View
+        style={[
+          styles.pieceBox,
+          {
+            left: pxX,
+            top: pxY,
+            width: pxW,
+            height: pxH,
+          },
+          hasCollision && styles.collisionBox,
+          isSelected && styles.selectedBox,
+          animatedStyle,
+        ]}
+      >
+        <View style={styles.innerContent}>
+          <View style={styles.topRow}>
             <Text
-              style={[styles.dimensionText, hasCollision && styles.collisionText]}
+              style={[
+                styles.orderNumber,
+                hasCollision && styles.collisionText,
+                isSelected && styles.selectedText,
+              ]}
               numberOfLines={1}
             >
-              {piece.w_mm} × {piece.h_mm}
+              #{piece.order_no} ({piece.piece_index}/{piece.total_qty})
             </Text>
-
-            {isLining ? (
-              <MaterialCommunityIcons
-                name="arrow-up-down"
-                size={12}
-                color="#B45309"
-                style={styles.grainIcon}
-              />
+            {hasCollision ? (
+              <MaterialCommunityIcons name="alert" size={14} color="#EF4444" />
             ) : null}
           </View>
 
-          {/* Floating actions menu when piece is selected */}
-          {selected && (
-            <View style={styles.floatingMenu}>
-              {/* Rotate button — STRICTLY HIDDEN IF LINING */}
-              {!isLining ? (
-                <Pressable
-                  style={styles.menuActionBtn}
-                  onPress={() => onRotatePiece(piece.id)}
-                >
-                  <MaterialCommunityIcons name="rotate-right" size={16} color="#FFFFFF" />
-                  <Text style={styles.menuActionText}>Rotate</Text>
-                </Pressable>
-              ) : null}
+          <Text
+            style={[styles.dimensionText, hasCollision && styles.collisionText]}
+            numberOfLines={1}
+          >
+            {piece.w_mm} × {piece.h_mm}
+          </Text>
 
-              {/* Move to another sheet */}
-              {allSheets.length > 1 ? (
-                <Pressable
-                  style={styles.menuActionBtn}
-                  onPress={() => setMoveModalVisible(true)}
-                >
-                  <MaterialCommunityIcons
-                    name="file-move-outline"
-                    size={16}
-                    color="#FFFFFF"
-                  />
-                  <Text style={styles.menuActionText}>Move</Text>
-                </Pressable>
-              ) : null}
-
-              {/* Remove to tray */}
-              <Pressable
-                style={[styles.menuActionBtn, styles.menuActionBtnDanger]}
-                onPress={() => onRemoveToTray(piece.id)}
-              >
-                <MaterialCommunityIcons name="tray-arrow-down" size={16} color="#FFFFFF" />
-                <Text style={styles.menuActionText}>Remove</Text>
-              </Pressable>
-            </View>
-          )}
-        </Animated.View>
-      </GestureDetector>
-
-      {/* Move Sheet Modal */}
-      <Modal
-        visible={moveModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMoveModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setMoveModalVisible(false)}
-        >
-          <View style={styles.sheetPickerModal}>
-            <Text style={styles.sheetPickerTitle}>Move Piece to Sheet</Text>
-            <Text style={styles.sheetPickerSubtitle}>
-              Select destination sheet for #{piece.order_no} ({piece.w_mm}×{piece.h_mm} mm):
-            </Text>
-
-            {allSheets
-              .filter((s) => s.id !== sheet.id)
-              .map((targetSheet, idx) => (
-                <Pressable
-                  key={targetSheet.id}
-                  style={styles.sheetChoiceBtn}
-                  onPress={() => {
-                    setMoveModalVisible(false);
-                    onMoveToSheet(piece.id, targetSheet.id);
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={targetSheet.source === 'offcut' ? 'shape' : 'crop-square'}
-                    size={20}
-                    color="#1A73E8"
-                  />
-                  <View style={styles.sheetChoiceInfo}>
-                    <Text style={styles.sheetChoiceTitle}>Sheet {idx + 1}</Text>
-                    <Text style={styles.sheetChoiceMeta}>
-                      {targetSheet.source === 'offcut' ? 'Offcut' : 'Full'} ·{' '}
-                      {targetSheet.width_mm}×{targetSheet.height_mm} mm
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-
-            <Pressable
-              style={styles.cancelBtn}
-              onPress={() => setMoveModalVisible(false)}
-            >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-    </>
+          {isLining ? (
+            <MaterialCommunityIcons
+              name="arrow-up-down"
+              size={12}
+              color="#B45309"
+              style={styles.grainIcon}
+            />
+          ) : null}
+        </View>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -302,9 +203,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   selectedBox: {
-    borderColor: '#1D4ED8',
+    borderColor: '#10B981',
     borderWidth: 2.5,
-    backgroundColor: '#BFDBFE',
+    backgroundColor: '#D1FAE5',
+    elevation: 6,
     zIndex: 999,
   },
   innerContent: {
@@ -334,107 +236,11 @@ const styles = StyleSheet.create({
     color: '#991B1B',
   },
   selectedText: {
-    color: '#1D4ED8',
+    color: '#065F46',
   },
   grainIcon: {
     position: 'absolute',
     top: 2,
     right: 2,
-  },
-  floatingMenu: {
-    position: 'absolute',
-    top: -42,
-    flexDirection: 'row',
-    backgroundColor: '#1E293B',
-    borderRadius: 8,
-    padding: 4,
-    gap: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 8,
-    zIndex: 1000,
-  },
-  menuActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 5,
-    backgroundColor: '#334155',
-  },
-  menuActionBtnDanger: {
-    backgroundColor: '#991B1B',
-  },
-  menuActionText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  sheetPickerModal: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  sheetPickerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 4,
-  },
-  sheetPickerSubtitle: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 14,
-  },
-  sheetChoiceBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 8,
-  },
-  sheetChoiceInfo: {
-    flex: 1,
-  },
-  sheetChoiceTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  sheetChoiceMeta: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  cancelBtn: {
-    marginTop: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  cancelBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
   },
 });

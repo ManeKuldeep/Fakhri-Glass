@@ -43,6 +43,11 @@ export default function SheetSwitcher({
                 <Text style={[styles.tabTitle, isActive && styles.tabTitleActive]}>
                   Sheet {index + 1}
                 </Text>
+                {sheet.source === 'offcut' && (
+                  <View style={styles.offcutBadge}>
+                    <Text style={styles.offcutBadgeText}>OFFCUT</Text>
+                  </View>
+                )}
                 <View style={[styles.badge, isActive && styles.badgeActive]}>
                   <Text style={[styles.badgeText, isActive && styles.badgeTextActive]}>
                     {piecesOnSheet.length}
@@ -108,6 +113,19 @@ const styles = StyleSheet.create({
   },
   tabTitleActive: {
     color: '#1A73E8',
+  },
+  offcutBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  offcutBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#059669',
   },
   badge: {
     backgroundColor: '#E2E8F0',

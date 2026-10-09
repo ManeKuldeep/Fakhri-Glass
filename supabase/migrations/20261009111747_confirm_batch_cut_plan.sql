@@ -1,0 +1,173 @@
+-- Migration: confirm_batch_cut_plan
+-- Allows cutting pieces from multiple orders of the same product on shared sheets.
+
+create or replace function confirm_batch_cut_plan(
+  p_order_ids uuid[],
+  p_product_id uuid,
+  p_kerf_mm int,
+  p_max_wastage_pct numeric,
+  p_pieces jsonb,   -- [{order_item_id, stock_item_id, x_mm, y_mm, w_mm, h_mm, rotated}]
+  p_offcuts jsonb   -- [{parent_id, width_mm, height_mm}]
+) returns uuid[]
+language plpgsql security definer set search_path = public as $$
+declare
+  v_shop_id uuid;
+  v_order_id uuid;
+  v_plan_id uuid;
+  v_plan_ids uuid[] := '{}';
+  v_expected int;
+  v_stock_ids uuid[];
+  v_locked int;
+  v_first_plan_id uuid;
+begin
+  -- 1. Ensure caller is authenticated and resolve shop_id
+  v_shop_id := auth_shop_id();
+  if v_shop_id is null then
+    raise exception 'Not authenticated or missing shop profile';
+  end if;
+
+  if p_order_ids is null or array_length(p_order_ids, 1) = 0 then
+    raise exception 'No orders specified for cut plan';
+  end if;
+
+  -- 2. Verify all orders exist and belong to caller's shop
+  if exists (
+    select 1 from unnest(p_order_ids) oid
+    where not exists (select 1 from orders where id = oid and shop_id = v_shop_id)
+  ) then
+    raise exception 'One or more orders not found or do not belong to your shop';
+  end if;
+
+  -- 3. Reject if a plan already exists for any of these orders and this product
+  if exists (
+    select 1 from cut_plans
+    where order_id = any(p_order_ids)
+      and product_id = p_product_id
+      and shop_id = v_shop_id
+  ) then
+    raise exception 'Cut plan already confirmed for one or more of these orders and product';
+  end if;
+
+  -- 4. Verify all pieces belong to one of the specified orders and product
+  if exists (
+    select 1 from jsonb_array_elements(p_pieces) e
+    where not exists (
+      select 1 from order_items oi
+      where oi.id = (e->>'order_item_id')::uuid
+        and oi.order_id = any(p_order_ids)
+        and oi.product_id = p_product_id
+        and oi.shop_id = v_shop_id
+    )
+  ) then
+    raise exception 'One or more pieces do not belong to the selected orders and product';
+  end if;
+
+  -- 5. Check piece count equals ordered quantity across all specified orders for this product
+  select coalesce(sum(qty), 0) into v_expected
+    from order_items
+   where order_id = any(p_order_ids)
+     and product_id = p_product_id
+     and shop_id = v_shop_id;
+
+  if v_expected = 0 or jsonb_array_length(p_pieces) <> v_expected then
+    raise exception 'Piece count (%) does not match ordered quantity (%)',
+      jsonb_array_length(p_pieces), v_expected;
+  end if;
+
+  -- 6. Lock used sheets FOR UPDATE and verify availability & shop ownership
+  select array_agg(distinct (e->>'stock_item_id')::uuid) into v_stock_ids
+    from jsonb_array_elements(p_pieces) e;
+
+  select count(*) into v_locked from (
+    select id from stock_items
+     where id = any(v_stock_ids)
+       and status = 'available'
+       and product_id = p_product_id
+       and shop_id = v_shop_id
+     for update) s;
+
+  if v_locked <> coalesce(array_length(v_stock_ids, 1), 0) then
+    raise exception 'One or more sheets are no longer available';
+  end if;
+
+  -- 7. Verify each offcut's parent_id is one of the sheets actually consumed
+  if exists (
+    select 1 from jsonb_array_elements(p_offcuts) o
+    where not ((o->>'parent_id')::uuid = any(v_stock_ids))
+  ) then
+    raise exception 'Offcut parent sheet is not one of the consumed sheets';
+  end if;
+
+  -- 8. Mark used sheets as consumed
+  update stock_items
+     set status = 'consumed'
+   where id = any(v_stock_ids)
+     and shop_id = v_shop_id;
+
+  -- 9. Record consume ledger rows in stock_movements for each order
+  foreach v_order_id in array p_order_ids loop
+    insert into stock_movements (shop_id, stock_item_id, type, ref_type, ref_id)
+    select v_shop_id, unnest(v_stock_ids), 'consume', 'order', v_order_id;
+  end loop;
+
+  -- 10. Insert cut plan and cut pieces per order
+  foreach v_order_id in array p_order_ids loop
+    insert into cut_plans (shop_id, order_id, product_id, kerf_mm, max_wastage_pct)
+    values (v_shop_id, v_order_id, p_product_id, p_kerf_mm, p_max_wastage_pct)
+    returning id into v_plan_id;
+
+    v_plan_ids := array_append(v_plan_ids, v_plan_id);
+
+    if v_first_plan_id is null then
+      v_first_plan_id := v_plan_id;
+    end if;
+
+    -- Insert cut pieces belonging to this specific order
+    insert into cut_pieces (shop_id, plan_id, order_item_id, stock_item_id, x_mm, y_mm, w_mm, h_mm, rotated)
+    select v_shop_id, v_plan_id, (e->>'order_item_id')::uuid, (e->>'stock_item_id')::uuid,
+           (e->>'x_mm')::int, (e->>'y_mm')::int, (e->>'w_mm')::int, (e->>'h_mm')::int,
+           coalesce((e->>'rotated')::boolean, false)
+      from jsonb_array_elements(p_pieces) e
+      join order_items oi on oi.id = (e->>'order_item_id')::uuid
+     where oi.order_id = v_order_id;
+  end loop;
+
+  -- 11. Insert created offcuts and ledger rows (copying vertical_line_height_mm from parent)
+  if jsonb_array_length(p_offcuts) > 0 and v_first_plan_id is not null then
+    with new_off as (
+      insert into stock_items (shop_id, product_id, width_mm, height_mm, source, parent_id, vertical_line_height_mm)
+      select v_shop_id, p_product_id, (o->>'width_mm')::int, (o->>'height_mm')::int, 'offcut',
+             (o->>'parent_id')::uuid,
+             (select s.vertical_line_height_mm from stock_items s where s.id = (o->>'parent_id')::uuid)
+        from jsonb_array_elements(p_offcuts) o
+      returning id
+    )
+    insert into stock_movements (shop_id, stock_item_id, type, ref_type, ref_id)
+    select v_shop_id, id, 'offcut_created', 'cut_plan', v_first_plan_id from new_off;
+  end if;
+
+  -- 12. Update order status for each order in p_order_ids
+  foreach v_order_id in array p_order_ids loop
+    update orders set status = case
+      when exists (
+        select 1 from order_items oi
+        where oi.order_id = v_order_id
+          and oi.shop_id = v_shop_id
+          and not exists (
+            select 1 from cut_plans cp
+            where cp.order_id = v_order_id
+              and cp.product_id = oi.product_id
+              and cp.shop_id = v_shop_id
+          )
+      ) then 'cutting' else 'cut' end
+    where id = v_order_id and status in ('new','cutting') and shop_id = v_shop_id;
+  end loop;
+
+  return v_plan_ids;
+end $$;
+
+-- Revoke & grant explicitly
+revoke all on function public.confirm_batch_cut_plan(uuid[], uuid, integer, numeric, jsonb, jsonb)
+  from public, anon;
+grant execute on function public.confirm_batch_cut_plan(uuid[], uuid, integer, numeric, jsonb, jsonb)
+  to authenticated;

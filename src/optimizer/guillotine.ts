@@ -27,6 +27,14 @@ export interface SplitResult {
   wastedRects: WastedRect[];
 }
 
+export type GuillotineSplitMode = 'horizontal' | 'vertical' | 'max_offcut';
+export type FitRule = 'shelf' | 'strip' | 'best_area' | 'best_short_side' | 'best_long_side';
+
+export interface PackSheetOptions {
+  splitMode?: GuillotineSplitMode;
+  fitRule?: FitRule;
+}
+
 /**
  * Split a free rectangle when a piece is placed at (rect.x_mm, rect.y_mm).
  * Adheres strictly to edge-to-edge guillotine cutting and tracks kerf cuts.
@@ -38,6 +46,8 @@ export function splitGuillotine(
   rotated: boolean,
   kerf_mm: number,
   isLining: boolean,
+  splitMode: GuillotineSplitMode = 'horizontal',
+  min_offcut_mm = 500,
 ): SplitResult {
   const kerfCuts: KerfCut[] = [];
   const newFreeRects: FreeRect[] = [];
@@ -115,12 +125,49 @@ export function splitGuillotine(
   // Both width and height are strictly smaller than free rectangle:
   // Decide whether to split vertically first or horizontally first.
   // Rule: For lining glass, ALWAYS split vertically first (parallel to flutes).
-  // For standard glass, choose the split that yields the largest remaining single rectangle (MaxAS).
+  let splitVerticalFirst = isLining;
 
-  const splitVerticalFirst =
-    isLining ||
-    // MaxAS heuristic: compare max area of remaining rects
-    (W - pw - kerf_mm) * H >= W * (H - ph - kerf_mm);
+  if (!isLining) {
+    if (splitMode === 'vertical') {
+      splitVerticalFirst = true;
+    } else if (splitMode === 'horizontal') {
+      splitVerticalFirst = false;
+    } else if (splitMode === 'max_offcut') {
+      // Choose the cut orientation that yields the larger usable offcut rectangle (>= min_offcut_mm)
+      const leftoverW = W - pw - kerf_mm;
+      const leftoverH = H - ph - kerf_mm;
+
+      // Horizontal-first cut:
+      // Top rect: W x leftoverH; Right rect: leftoverW x ph
+      const usableTopH = leftoverH > 0 && isUsableOffcut(W, leftoverH, min_offcut_mm);
+      const usableRightH = leftoverW > 0 && isUsableOffcut(leftoverW, ph, min_offcut_mm);
+      const maxSingleH = Math.max(
+        usableTopH ? W * leftoverH : 0,
+        usableRightH ? leftoverW * ph : 0,
+      );
+      const totalAreaH = (usableTopH ? W * leftoverH : 0) + (usableRightH ? leftoverW * ph : 0);
+
+      // Vertical-first cut:
+      // Right rect: leftoverW x H; Top rect: pw x leftoverH
+      const usableRightV = leftoverW > 0 && isUsableOffcut(leftoverW, H, min_offcut_mm);
+      const usableTopV = leftoverH > 0 && isUsableOffcut(pw, leftoverH, min_offcut_mm);
+      const maxSingleV = Math.max(
+        usableRightV ? leftoverW * H : 0,
+        usableTopV ? pw * leftoverH : 0,
+      );
+      const totalAreaV = (usableRightV ? leftoverW * H : 0) + (usableTopV ? pw * leftoverH : 0);
+
+      if (maxSingleV > maxSingleH) {
+        splitVerticalFirst = true;
+      } else if (maxSingleH > maxSingleV) {
+        splitVerticalFirst = false;
+      } else if (totalAreaV > totalAreaH) {
+        splitVerticalFirst = true;
+      } else {
+        splitVerticalFirst = false;
+      }
+    }
+  }
 
   if (splitVerticalFirst) {
     // 1. Primary vertical cut across full height H at x + pw
@@ -220,10 +267,14 @@ export function packSingleSheet(
   pieces: OptimizerPiece[],
   kerf_mm: number,
   min_offcut_mm: number,
+  options?: PackSheetOptions,
 ): {
   plan: SheetCutPlan;
   placedPieceIds: Set<string>;
 } {
+  const splitMode = options?.splitMode ?? 'horizontal';
+  const fitRule = options?.fitRule ?? 'shelf';
+
   let freeRects: FreeRect[] = [
     {
       x_mm: 0,
@@ -246,12 +297,108 @@ export function packSingleSheet(
     const isLiningPiece = piece.is_lining ?? false;
     const allowRotation = !isLiningSheet && !isLiningPiece;
 
-    // Find the best free rectangle using Best Area Fit (minimal leftover area)
-    let bestRectIndex = -1;
-    let bestRotated = false;
-    let bestPlacedW = 0;
-    let bestPlacedH = 0;
-    let minLeftoverArea = Number.POSITIVE_INFINITY;
+    interface Candidate {
+      index: number;
+      rect: FreeRect;
+      rotated: boolean;
+      placedW: number;
+      placedH: number;
+      leftoverArea: number;
+    }
+
+    const isBetterCandidate = (cand: Candidate, best: Candidate): boolean => {
+      if (fitRule === 'shelf') {
+        // Shelf packing:
+        // 1. Finish lower shelf first (lower Y coordinate)
+        if (cand.rect.y_mm !== best.rect.y_mm) {
+          return cand.rect.y_mm < best.rect.y_mm;
+        }
+        // 2. Pack left to right (lower X coordinate)
+        if (cand.rect.x_mm !== best.rect.x_mm) {
+          return cand.rect.x_mm < best.rect.x_mm;
+        }
+        // 3. Minimize shelf ceiling gap (match height of current shelf)
+        const candCeilingGap = Math.abs(cand.rect.height_mm - cand.placedH);
+        const bestCeilingGap = Math.abs(best.rect.height_mm - best.placedH);
+        if (candCeilingGap !== bestCeilingGap) {
+          return candCeilingGap < bestCeilingGap;
+        }
+        // 4. Prefer unrotated orientation
+        if (cand.rotated !== best.rotated) {
+          return !cand.rotated;
+        }
+        // 5. Prefer tighter fit (minimal leftover area)
+        return cand.leftoverArea < best.leftoverArea;
+      }
+
+      if (fitRule === 'strip') {
+        // Strip / column packing:
+        // 1. Finish left column first (lower X coordinate)
+        if (cand.rect.x_mm !== best.rect.x_mm) {
+          return cand.rect.x_mm < best.rect.x_mm;
+        }
+        // 2. Pack bottom to top (lower Y coordinate)
+        if (cand.rect.y_mm !== best.rect.y_mm) {
+          return cand.rect.y_mm < best.rect.y_mm;
+        }
+        // 3. Minimize column wall gap (match width of current column)
+        const candWallGap = Math.abs(cand.rect.width_mm - cand.placedW);
+        const bestWallGap = Math.abs(best.rect.width_mm - best.placedW);
+        if (candWallGap !== bestWallGap) {
+          return candWallGap < bestWallGap;
+        }
+        // 4. Prefer unrotated orientation
+        if (cand.rotated !== best.rotated) {
+          return !cand.rotated;
+        }
+        return cand.leftoverArea < best.leftoverArea;
+      }
+
+      if (fitRule === 'best_short_side') {
+        const candShort = Math.min(
+          cand.rect.width_mm - cand.placedW,
+          cand.rect.height_mm - cand.placedH,
+        );
+        const bestShort = Math.min(
+          best.rect.width_mm - best.placedW,
+          best.rect.height_mm - best.placedH,
+        );
+        if (candShort !== bestShort) {
+          return candShort < bestShort;
+        }
+        if (cand.rect.y_mm !== best.rect.y_mm) return cand.rect.y_mm < best.rect.y_mm;
+        if (cand.rect.x_mm !== best.rect.x_mm) return cand.rect.x_mm < best.rect.x_mm;
+        return cand.leftoverArea < best.leftoverArea;
+      }
+
+      if (fitRule === 'best_long_side') {
+        const candLong = Math.max(
+          cand.rect.width_mm - cand.placedW,
+          cand.rect.height_mm - cand.placedH,
+        );
+        const bestLong = Math.max(
+          best.rect.width_mm - best.placedW,
+          best.rect.height_mm - best.placedH,
+        );
+        if (candLong !== bestLong) {
+          return candLong < bestLong;
+        }
+        if (cand.rect.y_mm !== best.rect.y_mm) return cand.rect.y_mm < best.rect.y_mm;
+        if (cand.rect.x_mm !== best.rect.x_mm) return cand.rect.x_mm < best.rect.x_mm;
+        return cand.leftoverArea < best.leftoverArea;
+      }
+
+      // Default: Best Area Fit
+      if (cand.leftoverArea !== best.leftoverArea) {
+        return cand.leftoverArea < best.leftoverArea;
+      }
+      if (cand.rect.y_mm !== best.rect.y_mm) return cand.rect.y_mm < best.rect.y_mm;
+      if (cand.rect.x_mm !== best.rect.x_mm) return cand.rect.x_mm < best.rect.x_mm;
+      if (cand.rotated !== best.rotated) return !cand.rotated;
+      return false;
+    };
+
+    let bestCandidate: Candidate | null = null;
 
     for (let i = 0; i < freeRects.length; i++) {
       const rect = freeRects[i];
@@ -259,12 +406,16 @@ export function packSingleSheet(
       // Option 1: Unrotated
       if (piece.width_mm <= rect.width_mm && piece.height_mm <= rect.height_mm) {
         const leftover = rect.width_mm * rect.height_mm - piece.width_mm * piece.height_mm;
-        if (leftover < minLeftoverArea) {
-          minLeftoverArea = leftover;
-          bestRectIndex = i;
-          bestRotated = false;
-          bestPlacedW = piece.width_mm;
-          bestPlacedH = piece.height_mm;
+        const cand: Candidate = {
+          index: i,
+          rect,
+          rotated: false,
+          placedW: piece.width_mm,
+          placedH: piece.height_mm,
+          leftoverArea: leftover,
+        };
+        if (!bestCandidate || isBetterCandidate(cand, bestCandidate)) {
+          bestCandidate = cand;
         }
       }
 
@@ -275,15 +426,24 @@ export function packSingleSheet(
         piece.width_mm <= rect.height_mm
       ) {
         const leftover = rect.width_mm * rect.height_mm - piece.height_mm * piece.width_mm;
-        if (leftover < minLeftoverArea) {
-          minLeftoverArea = leftover;
-          bestRectIndex = i;
-          bestRotated = true;
-          bestPlacedW = piece.height_mm;
-          bestPlacedH = piece.width_mm;
+        const cand: Candidate = {
+          index: i,
+          rect,
+          rotated: true,
+          placedW: piece.height_mm,
+          placedH: piece.width_mm,
+          leftoverArea: leftover,
+        };
+        if (!bestCandidate || isBetterCandidate(cand, bestCandidate)) {
+          bestCandidate = cand;
         }
       }
     }
+
+    const bestRectIndex = bestCandidate ? bestCandidate.index : -1;
+    const bestRotated = bestCandidate ? bestCandidate.rotated : false;
+    const bestPlacedW = bestCandidate ? bestCandidate.placedW : 0;
+    const bestPlacedH = bestCandidate ? bestCandidate.placedH : 0;
 
     if (bestRectIndex >= 0) {
       const targetRect = freeRects[bestRectIndex];
@@ -295,6 +455,8 @@ export function packSingleSheet(
         bestRotated,
         kerf_mm,
         isLiningSheet,
+        splitMode,
+        min_offcut_mm,
       );
 
       placements.push({
