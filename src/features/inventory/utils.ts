@@ -146,6 +146,57 @@ export function snapInchesWith16th(inches: number): number {
 }
 
 /**
+ * Convert inches (whole or decimal) to integer millimetres.
+ */
+export function inToMm(inches: number): number {
+  if (inches <= 0) return 0;
+  return Math.round(inches * MM_PER_INCH);
+}
+
+/**
+ * Convert inches to millimetres with whole mm and 1/16 mm fraction breakdown.
+ */
+export function inToMmWithFrac(inches: number): {
+  wholeMm: number;
+  fracMm: number;
+  totalMm: number;
+} {
+  if (inches <= 0) {
+    return { wholeMm: 0, fracMm: 0, totalMm: 0 };
+  }
+  const exactMm = inches * MM_PER_INCH;
+  const wholeMm = Math.floor(exactMm);
+  const frac = exactMm - wholeMm;
+  const snappedFrac = snapTo16th(frac);
+  if (snappedFrac >= 1) {
+    return { wholeMm: wholeMm + 1, fracMm: 0, totalMm: wholeMm + 1 };
+  }
+  return { wholeMm, fracMm: snappedFrac, totalMm: wholeMm + snappedFrac };
+}
+
+/**
+ * Convert mm to inches rounded to 2 decimal places.
+ */
+export function mmToInches(mm: number): number {
+  if (mm <= 0) return 0;
+  return Math.round((mm / MM_PER_INCH) * 100) / 100;
+}
+
+/**
+ * Format mm as inches string (e.g. 48" or 54").
+ */
+export function formatInches(mm: number): string {
+  if (mm <= 0) return '0"';
+  const totalInches = mm / MM_PER_INCH;
+  const nearestWhole = Math.round(totalInches);
+  if (Math.abs(totalInches - nearestWhole) <= 0.05) {
+    return `${nearestWhole}"`;
+  }
+  const rounded = Math.round(totalInches * 100) / 100;
+  return `${rounded}"`;
+}
+
+/**
  * Convert feet and inches to integer millimetres.
  * Always snaps fractional/point inches to nearest 1/16" fraction for accurate calculation,
  * and rounds result to the nearest integer mm.
@@ -248,6 +299,12 @@ export function parseDimensionInput(input: string): number | null {
   const inOnlyMatch = trimmed.match(/^(\d+(?:\.\d+)?)"$/);
   if (inOnlyMatch) {
     return ftInToMm(0, Number(inOnlyMatch[1]));
+  }
+
+  // Inches with in / inch / inches: e.g. 48 in, 48.5 inches
+  const inWordMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*(?:in|inch|inches)$/i);
+  if (inWordMatch) {
+    return inToMm(Number(inWordMatch[1]));
   }
 
   return null;

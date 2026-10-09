@@ -3,13 +3,11 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import {
   FRACTIONS_MM_16THS,
   formatMm,
-  ftInToMm,
-  ftInToMmWithFrac,
-  mmToFtIn,
+  inToMmWithFrac,
   snapTo16th,
 } from '../utils';
 
-export type DimensionUnit = 'mm' | 'ft-in';
+export type DimensionUnit = 'mm' | 'in';
 
 interface DimensionInputProps {
   label: string;
@@ -21,10 +19,13 @@ interface DimensionInputProps {
 }
 
 /**
- * Dimension input with a unit toggle (mm / ft-in).
+ * Dimension input with a unit toggle (mm / in).
+ * - Defaults to mm as standard unit.
  * - In mm mode: whole mm input + 1/16 mm fraction selector (0, 1/16, 1/8, ..., 15/16).
  *   Typing a decimal point automatically snaps to the nearest 1/16 fraction.
- * - In ft-in mode: numeric inputs (feet + inches) without fraction picker (mm is the smallest unit).
+ * - In in (inches) mode: single numeric input for inches (no feet, no fractions).
+ *   Shows live converted preview in mm with 1/16 mm fractional breakdown.
+ * - Switching from in to mm automatically breaks down inches into whole mm + 1/16 mm fraction.
  * Parent receives integer mm via onValueChange for storage/cutting.
  */
 export default function DimensionInput({
@@ -39,8 +40,7 @@ export default function DimensionInput({
   const [mmText, setMmText] = useState('');
   const [selectedFrac, setSelectedFrac] = useState(0);
 
-  // ft-in mode state
-  const [ftText, setFtText] = useState('');
+  // in mode state (inches only)
   const [inText, setInText] = useState('');
 
   // Pre-fill from initialMm when it changes (edit form)
@@ -56,13 +56,16 @@ export default function DimensionInput({
         setSelectedFrac(frac);
       }
 
-      const { ft, inches } = mmToFtIn(initialMm);
-      setFtText(ft > 0 ? String(ft) : '');
-      setInText(inches > 0 ? String(inches) : '');
+      const totalInches = initialMm / 25.4;
+      const roundedInches = Math.round(totalInches * 100) / 100;
+      if (Math.abs(roundedInches - Math.round(roundedInches)) < 0.01) {
+        setInText(String(Math.round(roundedInches)));
+      } else {
+        setInText(String(roundedInches));
+      }
     } else {
       setMmText('');
       setSelectedFrac(0);
-      setFtText('');
       setInText('');
     }
   }, [initialMm]);
@@ -72,7 +75,6 @@ export default function DimensionInput({
     newUnit: DimensionUnit,
     newMm: string,
     newFrac: number,
-    newFt: string,
     newIn: string,
   ) {
     if (newUnit === 'mm') {
@@ -85,12 +87,11 @@ export default function DimensionInput({
         onValueChange(Math.round(total));
       }
     } else {
-      const ft = Number(newFt) || 0;
       const inches = Number(newIn) || 0;
-      if (ft === 0 && inches === 0) {
+      if (newIn.trim() === '' || inches <= 0) {
         onValueChange(null);
       } else {
-        onValueChange(ftInToMm(ft, inches));
+        onValueChange(Math.round(inches * 25.4));
       }
     }
   }
@@ -111,12 +112,12 @@ export default function DimensionInput({
             const nextWhole = (parseInt(wholeStr, 10) || 0) + 1;
             setMmText(String(nextWhole));
             setSelectedFrac(0);
-            emitMm('mm', String(nextWhole), 0, ftText, inText);
+            emitMm('mm', String(nextWhole), 0, inText);
             return;
           }
           setMmText(wholeStr);
           setSelectedFrac(snapped);
-          emitMm('mm', wholeStr, snapped, ftText, inText);
+          emitMm('mm', wholeStr, snapped, inText);
           return;
         }
       }
@@ -124,42 +125,41 @@ export default function DimensionInput({
 
     const sanitized = text.replace(/[^0-9]/g, '');
     setMmText(sanitized);
-    emitMm('mm', sanitized, selectedFrac, ftText, inText);
+    emitMm('mm', sanitized, selectedFrac, inText);
   }
 
   function handleFracChange(fracValue: number) {
     setSelectedFrac(fracValue);
-    emitMm('mm', mmText, fracValue, ftText, inText);
-  }
-
-  function handleFtChange(text: string) {
-    const sanitized = text.replace(/[^0-9]/g, '');
-    setFtText(sanitized);
-    emitMm('ft-in', mmText, selectedFrac, sanitized, inText);
+    emitMm('mm', mmText, fracValue, inText);
   }
 
   function handleInChange(text: string) {
     const sanitized = text.replace(/[^0-9.]/g, '');
-    setInText(sanitized);
-    emitMm('ft-in', mmText, selectedFrac, ftText, sanitized);
+    const parts = sanitized.split('.');
+    const cleaned = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : sanitized;
+    setInText(cleaned);
+    emitMm('in', mmText, selectedFrac, cleaned);
   }
 
   function handleUnitToggle(newUnit: DimensionUnit) {
     if (newUnit === unit) return;
 
     // Convert current value into the new unit's fields
-    if (newUnit === 'ft-in' && (mmText.trim() !== '' || selectedFrac > 0)) {
+    if (newUnit === 'in' && (mmText.trim() !== '' || selectedFrac > 0)) {
       const totalMm = (Number(mmText) || 0) + selectedFrac;
       if (totalMm > 0) {
-        const { ft, inches } = mmToFtIn(totalMm);
-        setFtText(ft > 0 ? String(ft) : '');
-        setInText(inches > 0 ? String(inches) : '');
+        const totalInches = totalMm / 25.4;
+        const roundedInches = Math.round(totalInches * 100) / 100;
+        if (Math.abs(roundedInches - Math.round(roundedInches)) < 0.01) {
+          setInText(String(Math.round(roundedInches)));
+        } else {
+          setInText(String(roundedInches));
+        }
       }
-    } else if (newUnit === 'mm' && (ftText.trim() !== '' || inText.trim() !== '')) {
-      const ft = Number(ftText) || 0;
+    } else if (newUnit === 'mm' && inText.trim() !== '') {
       const inches = Number(inText) || 0;
-      if (ft > 0 || inches > 0) {
-        const { wholeMm, fracMm } = ftInToMmWithFrac(ft, inches);
+      if (inches > 0) {
+        const { wholeMm, fracMm } = inToMmWithFrac(inches);
         setMmText(wholeMm > 0 ? String(wholeMm) : '');
         setSelectedFrac(fracMm);
       }
@@ -168,10 +168,8 @@ export default function DimensionInput({
     setUnit(newUnit);
   }
 
-  const computedMmFromFtIn =
-    unit === 'ft-in'
-      ? ftInToMmWithFrac(Number(ftText) || 0, Number(inText) || 0).totalMm
-      : 0;
+  const computedMmFromIn =
+    unit === 'in' ? inToMmWithFrac(Number(inText) || 0).totalMm : 0;
 
   const currentMmValue = (Number(mmText) || 0) + selectedFrac;
 
@@ -190,11 +188,11 @@ export default function DimensionInput({
             </Text>
           </Pressable>
           <Pressable
-            onPress={() => handleUnitToggle('ft-in')}
-            style={[styles.unitBtn, unit === 'ft-in' && styles.unitBtnActive]}
+            onPress={() => handleUnitToggle('in')}
+            style={[styles.unitBtn, unit === 'in' && styles.unitBtnActive]}
           >
-            <Text style={[styles.unitBtnText, unit === 'ft-in' && styles.unitBtnTextActive]}>
-              ft / in
+            <Text style={[styles.unitBtnText, unit === 'in' && styles.unitBtnTextActive]}>
+              in
             </Text>
           </Pressable>
         </View>
@@ -249,36 +247,27 @@ export default function DimensionInput({
           </View>
         </View>
       ) : (
-        <View style={styles.ftInContainer}>
-          <View style={styles.ftInRow}>
-            <View style={styles.ftInField}>
-              <TextInput
-                style={[styles.input, !editable && styles.inputDisabled]}
-                value={ftText}
-                onChangeText={handleFtChange}
-                placeholder="0"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
-                editable={editable}
-              />
-              <Text style={styles.ftInLabel}>ft</Text>
-            </View>
-            <View style={styles.ftInField}>
-              <TextInput
-                style={[styles.input, !editable && styles.inputDisabled]}
-                value={inText}
-                onChangeText={handleInChange}
-                placeholder="0"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
-                editable={editable}
-              />
-              <Text style={styles.ftInLabel}>in</Text>
-            </View>
+        <View style={styles.inContainer}>
+          <View style={styles.inFieldWrapper}>
+            <TextInput
+              style={[styles.input, styles.inInput, !editable && styles.inputDisabled]}
+              value={inText}
+              onChangeText={handleInChange}
+              placeholder="e.g. 48"
+              placeholderTextColor="#94A3B8"
+              keyboardType="numeric"
+              editable={editable}
+            />
+            <Text style={styles.inSuffix}>in</Text>
           </View>
 
-          {computedMmFromFtIn > 0 ? (
-            <Text style={styles.convertedHint}>= {formatMm(computedMmFromFtIn)}</Text>
+          {computedMmFromIn > 0 ? (
+            <View style={styles.mmFooterRow}>
+              <Text style={styles.mmHelperText}>
+                Converted to mm with 1/16 fraction:
+              </Text>
+              <Text style={styles.convertedHint}>= {formatMm(computedMmFromIn)}</Text>
+            </View>
           ) : null}
         </View>
       )}
@@ -337,23 +326,24 @@ const styles = StyleSheet.create({
   inputDisabled: {
     opacity: 0.5,
   },
-  ftInRow: {
-    flexDirection: 'row',
-    gap: 12,
+  inContainer: {
+    gap: 4,
   },
-  ftInField: {
-    flex: 1,
+  inFieldWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    position: 'relative',
   },
-  ftInLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+  inInput: {
+    flex: 1,
+    paddingRight: 40,
+  },
+  inSuffix: {
+    position: 'absolute',
+    right: 14,
+    fontSize: 15,
+    fontWeight: '600',
     color: '#64748B',
-  },
-  ftInContainer: {
-    gap: 8,
   },
   fractionRow: {
     flexDirection: 'row',

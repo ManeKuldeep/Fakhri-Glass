@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   calculateAreaSqFt,
   calculateAreaSqM,
-  formatFtIn,
+  formatInches,
   formatMm,
   getAspectRatioInfo,
 } from '../utils';
@@ -172,7 +172,7 @@ export function OffcutInspectionModal({
   const themeColor = isOffcut ? '#D97706' : '#059669';
   const themeBg = isOffcut ? '#FEF3C7' : '#D1FAE5';
 
-  const dimFormat = showFtIn ? formatFtIn : formatMm;
+  const dimFormat = showFtIn ? formatInches : formatMm;
   const areaSqFt = calculateAreaSqFt(widthMm, heightMm);
   const areaSqM = calculateAreaSqM(widthMm, heightMm);
   const aspectInfo = getAspectRatioInfo(widthMm, heightMm);
@@ -289,7 +289,7 @@ export function OffcutInspectionModal({
                   color="#64748B"
                 />
                 <Text style={styles.dimCalloutText}>
-                  {dimFormat(widthMm)} ({showFtIn ? formatMm(widthMm) : formatFtIn(widthMm)})
+                  {dimFormat(widthMm)} ({showFtIn ? formatMm(widthMm) : formatInches(widthMm)})
                 </Text>
                 <MaterialCommunityIcons
                   name="arrow-right"
@@ -416,7 +416,7 @@ export function OffcutInspectionModal({
                 color="#059669"
               />
               <Text style={styles.metricValue}>{formatMm(widthMm)} × {formatMm(heightMm)}</Text>
-              <Text style={styles.metricSub}>{formatFtIn(widthMm)} × {formatFtIn(heightMm)}</Text>
+              <Text style={styles.metricSub}>{formatInches(widthMm)} × {formatInches(heightMm)}</Text>
             </View>
 
             {/* Stock Count */}

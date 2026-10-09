@@ -4,6 +4,10 @@ import {
   formatMm,
   ftInToMm,
   ftInToMmWithFrac,
+  inToMm,
+  inToMmWithFrac,
+  mmToInches,
+  formatInches,
   parseDimensionInput,
   friendlyStockError,
   calculateAreaSqFt,
@@ -199,6 +203,12 @@ describe('parseDimensionInput', () => {
     expect(parseDimensionInput('3/16"')).toBe(5);
   });
 
+  it('parses inches with in/inch/inches suffix', () => {
+    expect(parseDimensionInput('48 in')).toBe(1219);
+    expect(parseDimensionInput('54 inch')).toBe(1372);
+    expect(parseDimensionInput('10 inches')).toBe(254);
+  });
+
   it('returns null for empty string', () => {
     expect(parseDimensionInput('')).toBeNull();
   });
@@ -214,6 +224,51 @@ describe('parseDimensionInput', () => {
 
   it('returns null for negative', () => {
     expect(parseDimensionInput('-5')).toBeNull();
+  });
+});
+
+describe('inToMm', () => {
+  it('converts 48 inches to 1219 mm', () => {
+    expect(inToMm(48)).toBe(1219);
+  });
+
+  it('converts 54 inches to 1372 mm', () => {
+    expect(inToMm(54)).toBe(1372);
+  });
+
+  it('handles zero or negative', () => {
+    expect(inToMm(0)).toBe(0);
+    expect(inToMm(-5)).toBe(0);
+  });
+});
+
+describe('inToMmWithFrac', () => {
+  it('converts 48 inches to whole 1219 mm with 3/16 fraction', () => {
+    const res = inToMmWithFrac(48);
+    expect(res.wholeMm).toBe(1219);
+    expect(res.fracMm).toBe(3 / 16);
+    expect(res.totalMm).toBe(1219 + 3 / 16);
+  });
+
+  it('converts 10 inches to exact 254 mm with 0 fraction', () => {
+    const res = inToMmWithFrac(10);
+    expect(res.wholeMm).toBe(254);
+    expect(res.fracMm).toBe(0);
+    expect(res.totalMm).toBe(254);
+  });
+});
+
+describe('mmToInches and formatInches', () => {
+  it('converts mm to rounded inches', () => {
+    expect(mmToInches(1219)).toBe(47.99);
+    expect(mmToInches(254)).toBe(10);
+  });
+
+  it('formats mm as inches string', () => {
+    expect(formatInches(1219)).toBe('48"');
+    expect(formatInches(1372)).toBe('54"');
+    expect(formatInches(254)).toBe('10"');
+    expect(formatInches(0)).toBe('0"');
   });
 });
 

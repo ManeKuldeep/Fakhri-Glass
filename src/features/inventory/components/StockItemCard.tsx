@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { formatMm, formatFtIn } from '../utils';
+import { formatMm, formatInches } from '../utils';
 import { useRemoveStock } from '../mutations';
 import { OffcutThumbnail, OffcutInspectionModal } from './OffcutVisualizer';
 
@@ -35,7 +35,7 @@ export default function StockItemCard({ item, showFtIn, onEdit }: StockItemCardP
   const [isInspecting, setIsInspecting] = useState(false);
   const { product } = item;
 
-  const dimFormat = showFtIn ? formatFtIn : formatMm;
+  const dimFormat = showFtIn ? formatInches : formatMm;
   const dimensions = `${dimFormat(item.width_mm)} × ${dimFormat(item.height_mm)}`;
 
   function handleRemove() {

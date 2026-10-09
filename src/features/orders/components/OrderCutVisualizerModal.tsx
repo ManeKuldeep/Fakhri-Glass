@@ -13,7 +13,7 @@ import { OrderCutPlan } from '../queries';
 import {
   calculateAreaSqFt,
   calculateAreaSqM,
-  formatFtIn,
+  formatInches,
   formatMm,
   getAspectRatioInfo,
 } from '../../inventory/utils';
@@ -61,7 +61,7 @@ export default function OrderCutVisualizerModal({
 }: OrderCutVisualizerModalProps) {
   const insets = useSafeAreaInsets();
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
-  const dimFormat = showFtIn ? formatFtIn : formatMm;
+  const dimFormat = showFtIn ? formatInches : formatMm;
 
   // Group cut pieces by their physical stock sheet across all product plans
   const sheets: SheetLayout[] = useMemo(() => {

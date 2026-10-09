@@ -133,7 +133,7 @@ export default function InventoryScreen() {
             color="#1A73E8"
           />
           <Text style={styles.unitToggleText}>
-            {showFtIn ? 'ft/in' : 'mm'}
+            {showFtIn ? 'in' : 'mm'}
           </Text>
         </Pressable>
       </View>

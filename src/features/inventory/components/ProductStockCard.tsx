@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { formatMm, formatFtIn } from '../utils';
+import { formatMm, formatInches } from '../utils';
 import { useRemoveStock } from '../mutations';
 import type { StockItemWithProduct } from '../queries';
 import { OffcutThumbnail, OffcutInspectionModal } from './OffcutVisualizer';
@@ -48,7 +48,7 @@ export default function ProductStockCard({
   const removeStock = useRemoveStock();
   const { product, totalSheets, items } = group;
 
-  const dimFormat = showFtIn ? formatFtIn : formatMm;
+  const dimFormat = showFtIn ? formatInches : formatMm;
 
   // Track draft quantity to remove for each size cluster
   const [removeQuantities, setRemoveQuantities] = useState<Record<string, string>>({});

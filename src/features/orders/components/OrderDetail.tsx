@@ -12,7 +12,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrderDetail, useOrderCutPlans } from '../queries';
-import { formatMm, formatFtIn } from '../../inventory/utils';
+import { formatMm, formatInches } from '../../inventory/utils';
 import { useState } from 'react';
 import { printOrderLabels } from '../../labels/services';
 import { useCancelOrder, useMarkOrderDelivered } from '../mutations';
@@ -48,7 +48,7 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
     isLining: boolean;
     quantity: number;
   } | null>(null);
-  const dimFormat = showFtIn ? formatFtIn : formatMm;
+  const dimFormat = showFtIn ? formatInches : formatMm;
 
   function handleMarkDelivered() {
     if (!order) return;
@@ -352,7 +352,7 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
                 onPress={() => setShowFtIn((v) => !v)}
               >
                 <MaterialCommunityIcons name="swap-horizontal" size={14} color="#1A73E8" />
-                <Text style={styles.unitToggleText}>{showFtIn ? 'ft/in' : 'mm'}</Text>
+                <Text style={styles.unitToggleText}>{showFtIn ? 'in' : 'mm'}</Text>
               </Pressable>
             </View>
 
