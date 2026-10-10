@@ -157,14 +157,13 @@ export function splitGuillotine(
       );
       const totalAreaV = (usableRightV ? leftoverW * H : 0) + (usableTopV ? pw * leftoverH : 0);
 
-      if (maxSingleV > maxSingleH) {
-        splitVerticalFirst = true;
-      } else if (maxSingleH > maxSingleV) {
-        splitVerticalFirst = false;
-      } else if (totalAreaV > totalAreaH) {
-        splitVerticalFirst = true;
+      if (totalAreaV !== totalAreaH) {
+        splitVerticalFirst = totalAreaV > totalAreaH;
+      } else if (maxSingleV !== maxSingleH) {
+        splitVerticalFirst = maxSingleV > maxSingleH;
       } else {
-        splitVerticalFirst = false;
+        // Longer Axis Split (LAS): split across the shorter dimension to preserve the longer dimension
+        splitVerticalFirst = W < H;
       }
     }
   }

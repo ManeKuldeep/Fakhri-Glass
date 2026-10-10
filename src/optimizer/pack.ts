@@ -78,14 +78,66 @@ const PACK_STRATEGIES: {
   splitMode: GuillotineSplitMode;
   fitRule: FitRule;
 }[] = [
-  { splitMode: 'max_offcut', fitRule: 'shelf' },
   { splitMode: 'horizontal', fitRule: 'shelf' },
-  { splitMode: 'max_offcut', fitRule: 'strip' },
+  { splitMode: 'max_offcut', fitRule: 'shelf' },
   { splitMode: 'vertical', fitRule: 'strip' },
+  { splitMode: 'max_offcut', fitRule: 'strip' },
   { splitMode: 'max_offcut', fitRule: 'best_area' },
   { splitMode: 'max_offcut', fitRule: 'best_short_side' },
   { splitMode: 'max_offcut', fitRule: 'best_long_side' },
 ];
+
+function scoreSheetPlan(plan: SheetCutPlan, placedCount: number): number {
+  const largestOffcut = plan.offcuts.reduce((max, o) => Math.max(max, o.width_mm * o.height_mm), 0);
+  return (
+    placedCount * 100_000_000 +
+    largestOffcut * 3 +
+    plan.offcut_area_mm2 * 2 -
+    plan.wasted_area_mm2 * 4
+  );
+}
+
+function packSingleSheetOptimally(
+  sheet: OptimizerSheet,
+  pieces: OptimizerPiece[],
+  settings: OptimizerSettings,
+  preferredOptions: PackSheetOptions,
+): { plan: SheetCutPlan; placedPieceIds: Set<string> } {
+  const preferred = packSingleSheet(
+    sheet,
+    pieces,
+    settings.kerf_mm,
+    settings.min_offcut_mm,
+    preferredOptions,
+  );
+
+  if (preferred.placedPieceIds.size === pieces.length && preferred.plan.wasted_area_mm2 === 0) {
+    return preferred;
+  }
+
+  let best = preferred;
+  let bestScore = scoreSheetPlan(best.plan, best.placedPieceIds.size);
+
+  for (const strat of PACK_STRATEGIES) {
+    if (strat.splitMode === preferredOptions.splitMode && strat.fitRule === preferredOptions.fitRule) {
+      continue;
+    }
+    const cand = packSingleSheet(
+      sheet,
+      pieces,
+      settings.kerf_mm,
+      settings.min_offcut_mm,
+      strat,
+    );
+    const score = scoreSheetPlan(cand.plan, cand.placedPieceIds.size);
+    if (score > bestScore) {
+      bestScore = score;
+      best = cand;
+    }
+  }
+
+  return best;
+}
 
 /**
  * Check if a sheet can potentially accommodate at least one of the candidate pieces.
@@ -143,11 +195,10 @@ function runPackingPass(
     if (remainingPieces.length === 0) break;
     if (!canSheetFitAnyPiece(offcut, remainingPieces)) continue;
 
-    const { plan, placedPieceIds } = packSingleSheet(
+    const { plan, placedPieceIds } = packSingleSheetOptimally(
       offcut,
       remainingPieces,
-      settings.kerf_mm,
-      settings.min_offcut_mm,
+      settings,
       packOptions,
     );
 
@@ -162,11 +213,10 @@ function runPackingPass(
     if (remainingPieces.length === 0) break;
     if (!canSheetFitAnyPiece(fullSheet, remainingPieces)) continue;
 
-    const { plan, placedPieceIds } = packSingleSheet(
+    const { plan, placedPieceIds } = packSingleSheetOptimally(
       fullSheet,
       remainingPieces,
-      settings.kerf_mm,
-      settings.min_offcut_mm,
+      settings,
       packOptions,
     );
 

@@ -62,163 +62,372 @@ export function computeSheetLeftovers(
   const totalSheetArea = sheet.width_mm * sheet.height_mm;
   const pieceArea = piecesOnSheet.reduce((sum, p) => sum + p.w_mm * p.h_mm, 0);
 
-  const offcuts: ComputedSheetLeftovers['offcuts'] = [];
-  const wastedRects: ComputedSheetLeftovers['wastedRects'] = [];
-  const kerfCuts: ComputedSheetLeftovers['kerfCuts'] = [];
+  if (piecesOnSheet.length === 0 || totalSheetArea <= 0) {
+    if (totalSheetArea <= 0) {
+      return { offcuts: [], wastedRects: [], kerfCuts: [], liveWastePct: 0 };
+    }
+    const usable = isUsableOffcut(sheet.width_mm, sheet.height_mm, min_offcut_mm);
+    return {
+      offcuts: usable
+        ? [
+            {
+              id: `${sheet.id}-full-offcut`,
+              parent_id: sheet.id,
+              x_mm: 0,
+              y_mm: 0,
+              width_mm: sheet.width_mm,
+              height_mm: sheet.height_mm,
+            },
+          ]
+        : [],
+      wastedRects: usable
+        ? []
+        : [
+            {
+              x_mm: 0,
+              y_mm: 0,
+              width_mm: sheet.width_mm,
+              height_mm: sheet.height_mm,
+            },
+          ],
+      kerfCuts: [],
+      liveWastePct: usable ? 0 : 100,
+    };
+  }
 
-  if (piecesOnSheet.length > 0 && totalSheetArea > 0) {
+  interface CandidatePartition {
+    offcuts: ComputedSheetLeftovers['offcuts'];
+    wastedRects: ComputedSheetLeftovers['wastedRects'];
+    kerfCuts: ComputedSheetLeftovers['kerfCuts'];
+    usableArea: number;
+    largestOffcut: number;
+    wasteArea: number;
+  }
+
+  const evaluateRectangles = (
+    rects: Array<{ x_mm: number; y_mm: number; width_mm: number; height_mm: number }>,
+    cuts: ComputedSheetLeftovers['kerfCuts'],
+  ): CandidatePartition => {
+    const offcuts: ComputedSheetLeftovers['offcuts'] = [];
+    const wastedRects: ComputedSheetLeftovers['wastedRects'] = [];
+    let usableArea = 0;
+    let largestOffcut = 0;
+    let wasteArea = 0;
+    let counter = 1;
+
+    for (const r of rects) {
+      if (r.width_mm <= 0 || r.height_mm <= 0) continue;
+      // An offcut must not be a razor-thin blade trim/sliver (< 40mm) and must meet min_offcut_mm
+      const isSliver = Math.min(r.width_mm, r.height_mm) < 40;
+      const usable = !isSliver && isUsableOffcut(r.width_mm, r.height_mm, min_offcut_mm);
+
+      if (usable) {
+        const area = r.width_mm * r.height_mm;
+        usableArea += area;
+        if (area > largestOffcut) largestOffcut = area;
+        offcuts.push({
+          id: `${sheet.id}-offcut-${counter++}`,
+          parent_id: sheet.id,
+          x_mm: r.x_mm,
+          y_mm: r.y_mm,
+          width_mm: r.width_mm,
+          height_mm: r.height_mm,
+        });
+      } else {
+        wasteArea += r.width_mm * r.height_mm;
+        wastedRects.push({
+          x_mm: r.x_mm,
+          y_mm: r.y_mm,
+          width_mm: r.width_mm,
+          height_mm: r.height_mm,
+        });
+      }
+    }
+
+    return {
+      offcuts,
+      wastedRects,
+      kerfCuts: cuts,
+      usableArea,
+      largestOffcut,
+      wasteArea,
+    };
+  };
+
+  // 1. Shelf (Row-based) Partition
+  const buildRowPartition = (): CandidatePartition => {
+    const rects: Array<{ x_mm: number; y_mm: number; width_mm: number; height_mm: number }> = [];
+    const cuts: ComputedSheetLeftovers['kerfCuts'] = [];
+
+    const sorted = [...piecesOnSheet].sort((a, b) =>
+      a.y_mm !== b.y_mm ? a.y_mm - b.y_mm : a.x_mm - b.x_mm,
+    );
+
+    interface RowGroup {
+      minY: number;
+      maxY: number;
+      pieces: typeof piecesOnSheet;
+    }
+    const rows: RowGroup[] = [];
+
+    for (const p of sorted) {
+      const existing = rows.find((r) => p.y_mm < r.maxY && p.y_mm + p.h_mm > r.minY);
+      if (existing) {
+        existing.minY = Math.min(existing.minY, p.y_mm);
+        existing.maxY = Math.max(existing.maxY, p.y_mm + p.h_mm);
+        existing.pieces.push(p);
+      } else {
+        rows.push({
+          minY: p.y_mm,
+          maxY: p.y_mm + p.h_mm,
+          pieces: [p],
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.minY - b.minY);
+
+    for (const r of rows) {
+      const rH = r.maxY - r.minY;
+      const minX = Math.min(...r.pieces.map((p) => p.x_mm));
+      const maxX = Math.max(...r.pieces.map((p) => p.x_mm + p.w_mm));
+
+      // Void to the left of pieces on this row
+      if (minX > kerf_mm) {
+        rects.push({
+          x_mm: 0,
+          y_mm: r.minY,
+          width_mm: minX - kerf_mm,
+          height_mm: rH,
+        });
+        cuts.push({
+          x_mm: minX - kerf_mm,
+          y_mm: r.minY,
+          width_mm: kerf_mm,
+          height_mm: rH,
+          orientation: 'vertical',
+        });
+      }
+
+      // Space to the right of pieces on this row
+      const rightW = sheet.width_mm - maxX - kerf_mm;
+      if (rightW > 0) {
+        rects.push({
+          x_mm: maxX + kerf_mm,
+          y_mm: r.minY,
+          width_mm: rightW,
+          height_mm: rH,
+        });
+        cuts.push({
+          x_mm: maxX,
+          y_mm: r.minY,
+          width_mm: kerf_mm,
+          height_mm: rH,
+          orientation: 'vertical',
+        });
+      }
+
+      // Cut between this row and top/next
+      cuts.push({
+        x_mm: 0,
+        y_mm: r.maxY,
+        width_mm: sheet.width_mm,
+        height_mm: kerf_mm,
+        orientation: 'horizontal',
+      });
+    }
+
+    const totalMaxY = Math.max(...rows.map((r) => r.maxY));
+    const topH = sheet.height_mm - totalMaxY - kerf_mm;
+    if (topH > 0) {
+      rects.push({
+        x_mm: 0,
+        y_mm: totalMaxY + kerf_mm,
+        width_mm: sheet.width_mm,
+        height_mm: topH,
+      });
+    }
+
+    return evaluateRectangles(rects, cuts);
+  };
+
+  // 2. Strip (Column-based) Partition
+  const buildColPartition = (): CandidatePartition => {
+    const rects: Array<{ x_mm: number; y_mm: number; width_mm: number; height_mm: number }> = [];
+    const cuts: ComputedSheetLeftovers['kerfCuts'] = [];
+
+    const sorted = [...piecesOnSheet].sort((a, b) =>
+      a.x_mm !== b.x_mm ? a.x_mm - b.x_mm : a.y_mm - b.y_mm,
+    );
+
+    interface ColGroup {
+      minX: number;
+      maxX: number;
+      pieces: typeof piecesOnSheet;
+    }
+    const cols: ColGroup[] = [];
+
+    for (const p of sorted) {
+      const existing = cols.find((c) => p.x_mm < c.maxX && p.x_mm + p.w_mm > c.minX);
+      if (existing) {
+        existing.minX = Math.min(existing.minX, p.x_mm);
+        existing.maxX = Math.max(existing.maxX, p.x_mm + p.w_mm);
+        existing.pieces.push(p);
+      } else {
+        cols.push({
+          minX: p.x_mm,
+          maxX: p.x_mm + p.w_mm,
+          pieces: [p],
+        });
+      }
+    }
+
+    cols.sort((a, b) => a.minX - b.minX);
+
+    for (const c of cols) {
+      const cW = c.maxX - c.minX;
+      const maxY = Math.max(...c.pieces.map((p) => p.y_mm + p.h_mm));
+      const topH = sheet.height_mm - maxY - kerf_mm;
+
+      if (topH > 0) {
+        rects.push({
+          x_mm: c.minX,
+          y_mm: maxY + kerf_mm,
+          width_mm: cW,
+          height_mm: topH,
+        });
+        cuts.push({
+          x_mm: c.minX,
+          y_mm: maxY,
+          width_mm: cW,
+          height_mm: kerf_mm,
+          orientation: 'horizontal',
+        });
+      }
+
+      cuts.push({
+        x_mm: c.maxX,
+        y_mm: 0,
+        width_mm: kerf_mm,
+        height_mm: sheet.height_mm,
+        orientation: 'vertical',
+      });
+    }
+
+    const totalMaxX = Math.max(...cols.map((c) => c.maxX));
+    const rightW = sheet.width_mm - totalMaxX - kerf_mm;
+    if (rightW > 0) {
+      rects.push({
+        x_mm: totalMaxX + kerf_mm,
+        y_mm: 0,
+        width_mm: rightW,
+        height_mm: sheet.height_mm,
+      });
+    }
+
+    return evaluateRectangles(rects, cuts);
+  };
+
+  // 3. Classic Bounding Box Partition
+  const buildBBoxPartition = (verticalFirst: boolean): CandidatePartition => {
+    const rects: Array<{ x_mm: number; y_mm: number; width_mm: number; height_mm: number }> = [];
+    const cuts: ComputedSheetLeftovers['kerfCuts'] = [];
+
     const maxX = Math.max(...piecesOnSheet.map((p) => p.x_mm + p.w_mm));
     const maxY = Math.max(...piecesOnSheet.map((p) => p.y_mm + p.h_mm));
-
     const rightW = sheet.width_mm - maxX - kerf_mm;
     const topH = sheet.height_mm - maxY - kerf_mm;
 
-    // Horizontal-first cut:
-    // Top rect: sheet.width_mm x topH; Right rect: rightW x maxY
-    const hTopUsable = topH > 0 && isUsableOffcut(sheet.width_mm, topH, min_offcut_mm);
-    const hRightUsable =
-      rightW > 0 && maxY > 0 && isUsableOffcut(rightW, maxY, min_offcut_mm);
-    const hLargest = Math.max(
-      hTopUsable ? sheet.width_mm * topH : 0,
-      hRightUsable ? rightW * maxY : 0,
-    );
-    const hTotal =
-      (hTopUsable ? sheet.width_mm * topH : 0) + (hRightUsable ? rightW * maxY : 0);
-
-    // Vertical-first cut:
-    // Right rect: rightW x sheet.height_mm; Top rect: maxX x topH
-    const vRightUsable =
-      rightW > 0 && isUsableOffcut(rightW, sheet.height_mm, min_offcut_mm);
-    const vTopUsable = topH > 0 && maxX > 0 && isUsableOffcut(maxX, topH, min_offcut_mm);
-    const vLargest = Math.max(
-      vRightUsable ? rightW * sheet.height_mm : 0,
-      vTopUsable ? maxX * topH : 0,
-    );
-    const vTotal =
-      (vRightUsable ? rightW * sheet.height_mm : 0) + (vTopUsable ? maxX * topH : 0);
-
-    const useVerticalCut =
-      sheet.is_lining === true || vLargest > hLargest || (vLargest === hLargest && vTotal > hTotal);
-
-    if (useVerticalCut) {
-      // 1. Vertical cut across full height at maxX
+    if (verticalFirst) {
       if (rightW > 0) {
-        kerfCuts.push({
+        rects.push({
+          x_mm: maxX + kerf_mm,
+          y_mm: 0,
+          width_mm: rightW,
+          height_mm: sheet.height_mm,
+        });
+        cuts.push({
           x_mm: maxX,
           y_mm: 0,
           width_mm: kerf_mm,
           height_mm: sheet.height_mm,
           orientation: 'vertical',
         });
-        if (vRightUsable) {
-          offcuts.push({
-            id: `${sheet.id}-right-offcut`,
-            parent_id: sheet.id,
-            x_mm: maxX + kerf_mm,
-            y_mm: 0,
-            width_mm: rightW,
-            height_mm: sheet.height_mm,
-          });
-        } else {
-          wastedRects.push({
-            x_mm: maxX + kerf_mm,
-            y_mm: 0,
-            width_mm: rightW,
-            height_mm: sheet.height_mm,
-          });
-        }
       }
-
-      // 2. Horizontal cut across width maxX at maxY
       if (topH > 0 && maxX > 0) {
-        kerfCuts.push({
+        rects.push({
+          x_mm: 0,
+          y_mm: maxY + kerf_mm,
+          width_mm: maxX,
+          height_mm: topH,
+        });
+        cuts.push({
           x_mm: 0,
           y_mm: maxY,
           width_mm: maxX,
           height_mm: kerf_mm,
           orientation: 'horizontal',
         });
-        if (vTopUsable) {
-          offcuts.push({
-            id: `${sheet.id}-top-offcut`,
-            parent_id: sheet.id,
-            x_mm: 0,
-            y_mm: maxY + kerf_mm,
-            width_mm: maxX,
-            height_mm: topH,
-          });
-        } else {
-          wastedRects.push({
-            x_mm: 0,
-            y_mm: maxY + kerf_mm,
-            width_mm: maxX,
-            height_mm: topH,
-          });
-        }
       }
     } else {
-      // 1. Horizontal cut across full width at maxY
       if (topH > 0) {
-        kerfCuts.push({
+        rects.push({
+          x_mm: 0,
+          y_mm: maxY + kerf_mm,
+          width_mm: sheet.width_mm,
+          height_mm: topH,
+        });
+        cuts.push({
           x_mm: 0,
           y_mm: maxY,
           width_mm: sheet.width_mm,
           height_mm: kerf_mm,
           orientation: 'horizontal',
         });
-        if (hTopUsable) {
-          offcuts.push({
-            id: `${sheet.id}-top-offcut`,
-            parent_id: sheet.id,
-            x_mm: 0,
-            y_mm: maxY + kerf_mm,
-            width_mm: sheet.width_mm,
-            height_mm: topH,
-          });
-        } else {
-          wastedRects.push({
-            x_mm: 0,
-            y_mm: maxY + kerf_mm,
-            width_mm: sheet.width_mm,
-            height_mm: topH,
-          });
-        }
       }
-
-      // 2. Vertical cut across height maxY at maxX
       if (rightW > 0 && maxY > 0) {
-        kerfCuts.push({
+        rects.push({
+          x_mm: maxX + kerf_mm,
+          y_mm: 0,
+          width_mm: rightW,
+          height_mm: maxY,
+        });
+        cuts.push({
           x_mm: maxX,
           y_mm: 0,
           width_mm: kerf_mm,
           height_mm: maxY,
           orientation: 'vertical',
         });
-        if (hRightUsable) {
-          offcuts.push({
-            id: `${sheet.id}-right-offcut`,
-            parent_id: sheet.id,
-            x_mm: maxX + kerf_mm,
-            y_mm: 0,
-            width_mm: rightW,
-            height_mm: maxY,
-          });
-        } else {
-          wastedRects.push({
-            x_mm: maxX + kerf_mm,
-            y_mm: 0,
-            width_mm: rightW,
-            height_mm: maxY,
-          });
-        }
       }
     }
+
+    return evaluateRectangles(rects, cuts);
+  };
+
+  const candidates: CandidatePartition[] = [];
+  if (sheet.is_lining) {
+    candidates.push(buildColPartition());
+    candidates.push(buildBBoxPartition(true));
+  } else {
+    candidates.push(buildRowPartition());
+    candidates.push(buildColPartition());
+    candidates.push(buildBBoxPartition(false));
+    candidates.push(buildBBoxPartition(true));
   }
+
+  candidates.sort((a, b) => {
+    if (a.usableArea !== b.usableArea) return b.usableArea - a.usableArea;
+    if (a.largestOffcut !== b.largestOffcut) return b.largestOffcut - a.largestOffcut;
+    return a.wasteArea - b.wasteArea;
+  });
+
+  const best = candidates[0];
 
   const pureWasteArea =
     totalSheetArea -
     pieceArea -
-    offcuts.reduce((sum, o) => sum + o.width_mm * o.height_mm, 0);
+    best.offcuts.reduce((sum, o) => sum + o.width_mm * o.height_mm, 0);
 
   const liveWastePct =
     totalSheetArea > 0
@@ -226,9 +435,9 @@ export function computeSheetLeftovers(
       : 0;
 
   return {
-    offcuts,
-    wastedRects,
-    kerfCuts,
+    offcuts: best.offcuts,
+    wastedRects: best.wastedRects,
+    kerfCuts: best.kerfCuts,
     liveWastePct,
   };
 }

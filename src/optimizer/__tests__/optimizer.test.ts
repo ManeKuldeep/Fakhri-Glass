@@ -254,6 +254,42 @@ describe('Cutting Optimizer Core Unit Tests', () => {
       expect(result.unplaced_pieces[0].id).toBe('p2');
       expect(result.warnings).toContain('Insufficient stock for 1 piece(s)');
     });
+
+    it('packs multi-row elongated offcut sheets aligning row 2 pieces to left with maximized usable offcut', () => {
+      const sheet: OptimizerSheet = {
+        id: 'offcut-953-285',
+        width_mm: 953,
+        height_mm: 285,
+        source: 'offcut',
+      };
+      const pieces: OptimizerPiece[] = [
+        { id: 'p1', order_item_id: 'oi-1', width_mm: 328, height_mm: 143 },
+        { id: 'p2', order_item_id: 'oi-1', width_mm: 328, height_mm: 143 },
+        { id: 'p3', order_item_id: 'oi-2', width_mm: 353, height_mm: 123 },
+      ];
+
+      const result = packPieces([sheet], pieces, { kerf_mm: 3, min_offcut_mm: 500 });
+      expect(result.unplaced_pieces).toHaveLength(0);
+      expect(result.plans).toHaveLength(1);
+
+      const plan = result.plans[0];
+      expect(plan.placements).toHaveLength(3);
+
+      // Verify that second row piece is left-aligned (x=0) and not shifted leaving dead space
+      const row2Pieces = plan.placements.filter((p) => p.y_mm >= 120);
+      expect(row2Pieces.length).toBeGreaterThanOrEqual(1);
+      const minRow2X = Math.min(...row2Pieces.map((p) => p.x_mm));
+      expect(minRow2X).toBe(0);
+
+      // Verify validation and area conservation
+      const val = validatePlacements(plan.sheet, plan.placements, 3);
+      expect(val.isValid).toBe(true);
+      expect(verifyAreaConservation(plan).isConserved).toBe(true);
+
+      // Verify usable offcut is preserved (width >= 500mm) instead of being turned into scrap discard
+      const usableOffcut = plan.offcuts.find((o) => o.width_mm >= 500 || o.height_mm >= 500);
+      expect(usableOffcut).toBeDefined();
+    });
   });
 
   describe('Integration with sample fixtures', () => {

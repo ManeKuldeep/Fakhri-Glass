@@ -12,6 +12,7 @@ import {
   friendlyConfirmCutError,
   findBestPlacementOnSheet,
   canFitPieceOnSheet,
+  computeSheetLeftovers,
 } from '../utils';
 import { mergeCuttingQueueTasks } from '../queries';
 import { CuttingQueueTask } from '../types';
@@ -314,6 +315,37 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
       // For lining glass, width_mm cannot exceed sheet.width_mm and height_mm cannot exceed sheet.height_mm
       expect(canFitPieceOnSheet(sheet, { width_mm: 1200, height_mm: 1600 }, true)).toBe(false);
       expect(canFitPieceOnSheet(sheet, { width_mm: 1200, height_mm: 1400 }, true)).toBe(true);
+    });
+  });
+
+  describe('computeSheetLeftovers', () => {
+    it('accurately identifies row shelf offcut and minimizes discard on multi-row placements', () => {
+      const sheet = { id: 'offcut-953-285', width_mm: 953, height_mm: 285 };
+      const kerf = 3;
+      const minOffcut = 100;
+      // Row 1: piece at (0,0) [353x123]
+      // Row 2: piece at (0,126) [328x143] and (331,126) [328x143]
+      const pieces = [
+        { x_mm: 0, y_mm: 0, w_mm: 353, h_mm: 123 },
+        { x_mm: 0, y_mm: 126, w_mm: 328, h_mm: 143 },
+        { x_mm: 331, y_mm: 126, w_mm: 328, h_mm: 143 },
+      ];
+
+      const { offcuts, wastedRects, liveWastePct } = computeSheetLeftovers(
+        sheet,
+        pieces,
+        kerf,
+        minOffcut,
+      );
+
+      // Usable offcut to the right of row 1 (597 x 123 mm)
+      expect(offcuts.length).toBeGreaterThanOrEqual(1);
+      const rowOffcut = offcuts.find((o) => o.width_mm === 597 && o.height_mm === 123);
+      expect(rowOffcut).toBeDefined();
+
+      // Waste should be small (~22.4%), not inflated to 45%
+      expect(liveWastePct).toBeLessThan(25);
+      expect(wastedRects.length).toBeGreaterThan(0);
     });
   });
 });
