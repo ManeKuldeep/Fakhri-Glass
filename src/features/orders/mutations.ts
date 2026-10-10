@@ -48,22 +48,40 @@ export function useCreateOrder() {
 
   return useMutation({
     mutationFn: async (input: CreateOrderInput) => {
-      // 1. Upsert customer
+      // 1. Resolve or create customer
       let customerId = input.existingCustomerId;
 
-      if (customerId) {
-        // Update existing customer info if changed
-        const { error: updateErr } = await supabase
+      // Look up existing customer by exact phone match (ignore empty phone) if not already resolved
+      const trimmedPhone = input.customerPhone ? input.customerPhone.trim() : '';
+      if (!customerId && trimmedPhone) {
+        const { data: matchedCustomer } = await supabase
           .from('customers')
-          .update({
-            name: input.customerName,
-            phone: input.customerPhone || null,
-            address: input.customerAddress || null,
-          })
-          .eq('id', customerId);
+          .select('id, name, address')
+          .eq('phone', trimmedPhone)
+          .limit(1)
+          .maybeSingle();
 
-        if (updateErr) {
-          throw new Error(`Failed to update customer: ${updateErr.message}`);
+        if (matchedCustomer) {
+          // If found, reuse it and do not overwrite its name or address without explicit confirmation
+          customerId = matchedCustomer.id;
+        }
+      }
+
+      if (customerId) {
+        // Only update customer details if explicitly confirmed/selected by user (input.existingCustomerId)
+        if (input.existingCustomerId) {
+          const { error: updateErr } = await supabase
+            .from('customers')
+            .update({
+              name: input.customerName,
+              phone: input.customerPhone || null,
+              address: input.customerAddress || null,
+            })
+            .eq('id', customerId);
+
+          if (updateErr) {
+            throw new Error(`Failed to update customer: ${updateErr.message}`);
+          }
         }
       } else {
         // Create new customer

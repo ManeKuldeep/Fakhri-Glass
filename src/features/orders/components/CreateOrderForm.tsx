@@ -13,7 +13,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCategories, useProducts, useStockItems } from '../../inventory/queries';
-import { useCustomerSearch } from '../queries';
+import { useCustomerSearch, useCustomerByPhone } from '../queries';
 import { useCreateOrder } from '../mutations';
 import { STORES } from '../../../constants/stores';
 import { useAuthStore } from '../../../stores/authStore';
@@ -66,8 +66,9 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
   const [customerAddress, setCustomerAddress] = useState('');
   const [existingCustomerId, setExistingCustomerId] = useState<string | undefined>();
 
-  // Customer lookup by name
+  // Customer lookup by name and phone
   const { data: matchingCustomers } = useCustomerSearch(customerName);
+  const { data: phoneCustomer } = useCustomerByPhone(customerPhone.trim());
 
   // Order fields
   const [store, setStore] = useState(defaultStore);
@@ -311,6 +312,26 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
             placeholderTextColor="#94A3B8"
             keyboardType="phone-pad"
           />
+
+          {/* Customer suggestion by phone match */}
+          {phoneCustomer && !existingCustomerId ? (
+            <View style={styles.suggestionsWrapper}>
+              <Text style={styles.suggestionsHeader}>Existing customer with this phone number:</Text>
+              <Pressable
+                style={styles.suggestion}
+                onPress={() => handleSelectCustomer(phoneCustomer)}
+              >
+                <MaterialCommunityIcons name="account-check" size={18} color="#059669" />
+                <View style={styles.suggestionContent}>
+                  <Text style={styles.suggestionBold}>{phoneCustomer.name}</Text>
+                  {phoneCustomer.address ? (
+                    <Text style={styles.suggestionPhone}>{phoneCustomer.address}</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.suggestionAction}>Use Existing</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <Text style={styles.fieldLabel}>Address</Text>
           <TextInput
