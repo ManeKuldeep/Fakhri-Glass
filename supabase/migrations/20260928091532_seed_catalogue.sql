@@ -6,7 +6,7 @@ declare
 begin
   select id into v_shop from public.shops order by name limit 1;
   if v_shop is null then
-    raise exception 'No shop found. Create the shop before seeding the catalogue.';
+    insert into public.shops (name) values ('Fakhri Glass') returning id into v_shop;
   end if;
 
   insert into public.categories (shop_id, name, sort_order)

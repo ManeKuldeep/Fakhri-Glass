@@ -38,6 +38,7 @@ supabase/migrations/    the only way the schema changes
 
 Data set by hand (not in a migration): one shop, "Fakhri Glass", and 3 profiles
 (Murtuza mumbai, Qutub sanpada, Hussain cutter). Auth users were created in the dashboard.
+Documented exception: migration 20260928091532_seed_catalogue was updated in-place to insert 'Fakhri Glass' if no shop exists, allowing clean automated test resets while keeping live unaffected.
 
 ## 4. Data model
 

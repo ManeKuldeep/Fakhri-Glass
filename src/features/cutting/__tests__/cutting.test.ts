@@ -96,6 +96,11 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
       expect(msg).toContain('Offcut parent sheet');
     });
 
+    it('translates "Cannot cut an order that is cancelled, delivered or already fully cut" guard error', () => {
+      const msg = friendlyConfirmCutError('Cannot cut an order that is cancelled, delivered or already fully cut');
+      expect(msg).toBe('This order was cancelled or already completed. Please refresh the cutting queue.');
+    });
+
     it('passes through other errors unchanged', () => {
       const msg = friendlyConfirmCutError('Network request failed');
       expect(msg).toBe('Network request failed');

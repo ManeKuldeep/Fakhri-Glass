@@ -25,6 +25,9 @@ export function friendlyConfirmCutError(message: string): string {
   if (lower.includes('offcut parent sheet is not one of the consumed sheets')) {
     return 'Validation failed: Offcut parent sheet was not one of the consumed sheets.';
   }
+  if (lower.includes('cancelled, delivered or already fully cut')) {
+    return 'This order was cancelled or already completed. Please refresh the cutting queue.';
+  }
   return message;
 }
 

@@ -53,6 +53,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
+    "test:db": "jest --config jest.db.config.js --runInBand",
     "typecheck": "tsc --noEmit",
     "postinstall": "patch-package"
   },
