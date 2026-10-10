@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { cuttingKeys } from '../cutting/queries';
+import { dashboardKeys } from '../dashboard/queries';
 import { inventoryKeys } from '../inventory/queries';
 import { orderKeys } from './queries';
 
@@ -112,6 +113,7 @@ export function useCreateOrder() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: orderKeys.all });
       void queryClient.invalidateQueries({ queryKey: cuttingKeys.all });
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -168,6 +170,7 @@ export function useUpdateOrder() {
       void queryClient.invalidateQueries({ queryKey: orderKeys.all });
       void queryClient.invalidateQueries({ queryKey: cuttingKeys.all });
       void queryClient.invalidateQueries({ queryKey: inventoryKeys.all });
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -191,6 +194,7 @@ export function useCancelOrder() {
       void queryClient.invalidateQueries({ queryKey: orderKeys.all });
       void queryClient.invalidateQueries({ queryKey: cuttingKeys.all });
       void queryClient.invalidateQueries({ queryKey: inventoryKeys.all });
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }
@@ -227,6 +231,7 @@ export function useMarkOrderDelivered() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: orderKeys.all });
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
     },
   });
 }

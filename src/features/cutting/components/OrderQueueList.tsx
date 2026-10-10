@@ -30,10 +30,59 @@ export default function OrderQueueList({
       ? profile.assignment
       : undefined;
 
+  const [viewMode, setViewMode] = useState<'product' | 'order'>('product');
   const [storeFilter, setStoreFilter] = useState<string | undefined>(defaultStore);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 
   const { data: queue, isLoading, error, refetch } = useCuttingQueue(storeFilter);
+
+  // Group all tasks by product for the "By Product Type" view
+  const productGroups = useMemo(() => {
+    if (!queue) return [];
+    const map = new Map<string, CuttingQueueTask[]>();
+    for (const t of queue) {
+      const arr = map.get(t.productId) ?? [];
+      arr.push(t);
+      map.set(t.productId, arr);
+    }
+
+    return Array.from(map.entries()).map(([productId, tasks]) => {
+      const totalPieces = tasks.reduce((sum, t) => sum + t.totalPiecesCount, 0);
+      const orderNos = Array.from(
+        new Set(
+          tasks.flatMap((t) =>
+            t.orderNos && t.orderNos.length > 0 ? t.orderNos : [t.orderNo],
+          ),
+        ),
+      );
+
+      const uniqueSizes = new Map<string, { w: number; h: number; qty: number }>();
+      for (const t of tasks) {
+        for (const oi of t.orderItems) {
+          const key = `${oi.widthMm}x${oi.heightMm}`;
+          const cur = uniqueSizes.get(key);
+          if (cur) {
+            cur.qty += oi.qty;
+          } else {
+            uniqueSizes.set(key, { w: oi.widthMm, h: oi.heightMm, qty: oi.qty });
+          }
+        }
+      }
+
+      return {
+        productId,
+        productName: tasks[0].productName,
+        categoryName: tasks[0].categoryName,
+        thicknessMm: tasks[0].thicknessMm,
+        color: tasks[0].color,
+        isLining: tasks[0].isLining,
+        tasks,
+        totalPieces,
+        orderNos,
+        sizes: Array.from(uniqueSizes.values()),
+      };
+    });
+  }, [queue]);
 
   const selectedTasks = useMemo(() => {
     if (!queue || selectedKeys.length === 0) return [];
@@ -46,34 +95,6 @@ export default function OrderQueueList({
     () => selectedTasks.reduce((sum, t) => sum + t.totalPiecesCount, 0),
     [selectedTasks],
   );
-
-  // Identify product groups that have 2 or more pending orders that can be space-optimised together
-  const combinableGroups = useMemo(() => {
-    if (!queue) return [];
-    const map = new Map<string, CuttingQueueTask[]>();
-    for (const t of queue) {
-      const arr = map.get(t.productId) ?? [];
-      arr.push(t);
-      map.set(t.productId, arr);
-    }
-    const result: Array<{
-      productId: string;
-      productName: string;
-      tasks: CuttingQueueTask[];
-      totalPieces: number;
-    }> = [];
-    for (const [productId, tasks] of map.entries()) {
-      if (tasks.length > 1) {
-        result.push({
-          productId,
-          productName: tasks[0].productName,
-          tasks,
-          totalPieces: tasks.reduce((sum, t) => sum + t.totalPiecesCount, 0),
-        });
-      }
-    }
-    return result;
-  }, [queue]);
 
   const allCompatibleKeys = useMemo(() => {
     if (!selectedProductId || !queue) return [];
@@ -116,6 +137,105 @@ export default function OrderQueueList({
     onSelectTask(merged);
   };
 
+  const renderProductGroupCard = ({
+    item,
+  }: {
+    item: (typeof productGroups)[number];
+  }) => {
+    return (
+      <View style={styles.productCard}>
+        <View style={styles.productCardHeader}>
+          <View style={styles.productIconBox}>
+            <MaterialCommunityIcons name="layers-outline" size={24} color="#1A73E8" />
+          </View>
+          <View style={styles.productTitleArea}>
+            <Text style={styles.productCardTitle}>{item.productName}</Text>
+            <Text style={styles.productCardSubtitle}>
+              {item.categoryName} · {item.thicknessMm} mm
+              {item.color ? ` · ${item.color}` : ''}
+            </Text>
+          </View>
+          {item.isLining ? (
+            <View style={styles.liningBadge}>
+              <MaterialCommunityIcons name="texture-box" size={14} color="#B45309" />
+              <Text style={styles.liningBadgeText}>Figured / Lining</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Aggregated Orders & Pieces Stats */}
+        <View style={styles.productStatsRow}>
+          <View style={styles.productStatBox}>
+            <Text style={styles.productStatNumber}>{item.totalPieces}</Text>
+            <Text style={styles.productStatLabel}>
+              {item.totalPieces === 1 ? 'Piece' : 'Pieces'} to Cut
+            </Text>
+          </View>
+          <View style={styles.productStatBox}>
+            <Text style={styles.productStatNumber}>{item.orderNos.length}</Text>
+            <Text style={styles.productStatLabel}>
+              {item.orderNos.length === 1 ? 'Order' : 'Orders'} Pending
+            </Text>
+          </View>
+          <View style={styles.productStatBox}>
+            <Text style={styles.productStatNumber}>{item.sizes.length}</Text>
+            <Text style={styles.productStatLabel}>
+              {item.sizes.length === 1 ? 'Size Spec' : 'Size Specs'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Orders list tags */}
+        <View style={styles.ordersTagRow}>
+          <Text style={styles.ordersTagLabel}>Orders:</Text>
+          <View style={styles.ordersPillsWrap}>
+            {item.orderNos.map((no) => (
+              <View key={no} style={styles.orderNoPill}>
+                <Text style={styles.orderNoPillText}>#{no}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Sizes breakdown preview */}
+        <View style={styles.sizesContainer}>
+          {item.sizes.slice(0, 4).map((s, idx) => (
+            <View key={idx} style={styles.sizeItemRow}>
+              <Text style={styles.dimensionTag}>
+                {s.w} × {s.h} mm
+              </Text>
+              <Text style={styles.qtyTag}>
+                {s.qty} {s.qty === 1 ? 'pc' : 'pcs'}
+              </Text>
+            </View>
+          ))}
+          {item.sizes.length > 4 && (
+            <Text style={styles.moreSizesText}>
+              + {item.sizes.length - 4} more size specifications
+            </Text>
+          )}
+        </View>
+
+        {/* Big Visualise CTA Button */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.productActionBtn,
+            pressed && styles.productActionBtnPressed,
+          ]}
+          onPress={() => {
+            const merged = mergeCuttingQueueTasks(item.tasks);
+            onSelectTask(merged);
+          }}
+        >
+          <MaterialCommunityIcons name="content-cut" size={20} color="#FFFFFF" />
+          <Text style={styles.productActionBtnText}>
+            Visualise All Pieces in Space Optimiser ({item.totalPieces} pcs)
+          </Text>
+        </Pressable>
+      </View>
+    );
+  };
+
   const renderTaskCard = ({ item }: { item: CuttingQueueTask }) => {
     const key = `${item.orderId}:${item.productId}`;
     const isSelected = selectedKeys.includes(key);
@@ -147,6 +267,12 @@ export default function OrderQueueList({
                   {item.store === 'mumbai' ? 'Mumbai' : 'Sanpada'}
                 </Text>
               </View>
+              {item.isPartiallyCut && (
+                <View style={styles.partialBadge}>
+                  <MaterialCommunityIcons name="clock-outline" size={12} color="#D97706" />
+                  <Text style={styles.partialBadgeText}>Partially Cut · On Hold</Text>
+                </View>
+              )}
             </View>
 
             <Text style={styles.customerName}>{item.customerName}</Text>
@@ -190,6 +316,7 @@ export default function OrderQueueList({
               </Text>
               <Text style={styles.qtyTag}>
                 {oi.qty} {oi.qty === 1 ? 'pc' : 'pcs'}
+                {oi.cutQty && oi.cutQty > 0 ? ` (${oi.cutQty} cut)` : ''}
               </Text>
             </View>
           ))}
@@ -207,51 +334,9 @@ export default function OrderQueueList({
     );
   };
 
-  const renderListHeader = () => {
-    if (combinableGroups.length === 0) return null;
-    return (
-      <View style={styles.bannerContainer}>
-        {combinableGroups.map((group) => (
-          <View key={group.productId} style={styles.batchBanner}>
-            <View style={styles.batchBannerHeader}>
-              <View style={styles.batchIconWrapper}>
-                <MaterialCommunityIcons
-                  name="view-dashboard-variant-outline"
-                  size={20}
-                  color="#1A73E8"
-                />
-              </View>
-              <View style={styles.batchBannerText}>
-                <Text style={styles.batchBannerTitle}>All Orders Space Optimiser</Text>
-                <Text style={styles.batchBannerSubtitle}>
-                  {group.tasks.length} orders · {group.totalPieces} pieces · {group.productName}
-                </Text>
-              </View>
-            </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.batchBannerBtn,
-                pressed && styles.batchBannerBtnPressed,
-              ]}
-              onPress={() => {
-                const merged = mergeCuttingQueueTasks(group.tasks);
-                onSelectTask(merged);
-              }}
-            >
-              <MaterialCommunityIcons name="content-cut" size={15} color="#FFFFFF" />
-              <Text style={styles.batchBannerBtnText}>
-                Visualise All ({group.tasks.length})
-              </Text>
-            </Pressable>
-          </View>
-        ))}
-      </View>
-    );
-  };
-
   return (
     <View style={styles.container}>
-      {/* Top Bar with Filter & Settings */}
+      {/* Top Bar with Store Filter & Settings */}
       <View style={styles.topBar}>
         <View style={styles.filterRow}>
           <Pressable
@@ -300,6 +385,53 @@ export default function OrderQueueList({
         </Pressable>
       </View>
 
+      {/* Segmented View Mode Toggle: By Product Type vs By Order Queue */}
+      <View style={styles.viewModeContainer}>
+        <Pressable
+          style={[
+            styles.viewModeBtn,
+            viewMode === 'product' && styles.viewModeBtnActive,
+          ]}
+          onPress={() => setViewMode('product')}
+        >
+          <MaterialCommunityIcons
+            name="layers-outline"
+            size={18}
+            color={viewMode === 'product' ? '#FFFFFF' : '#64748B'}
+          />
+          <Text
+            style={[
+              styles.viewModeText,
+              viewMode === 'product' && styles.viewModeTextActive,
+            ]}
+          >
+            By Product Type ({productGroups.length})
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[
+            styles.viewModeBtn,
+            viewMode === 'order' && styles.viewModeBtnActive,
+          ]}
+          onPress={() => setViewMode('order')}
+        >
+          <MaterialCommunityIcons
+            name="format-list-checks"
+            size={18}
+            color={viewMode === 'order' ? '#FFFFFF' : '#64748B'}
+          />
+          <Text
+            style={[
+              styles.viewModeText,
+              viewMode === 'order' && styles.viewModeTextActive,
+            ]}
+          >
+            By Order Queue ({queue?.length ?? 0})
+          </Text>
+        </Pressable>
+      </View>
+
       {/* Content */}
       {isLoading ? (
         <View style={styles.centered}>
@@ -315,16 +447,24 @@ export default function OrderQueueList({
           </Pressable>
         </View>
       ) : queue && queue.length > 0 ? (
-        <FlatList
-          data={queue}
-          keyExtractor={(item) => `${item.orderId}:${item.productId}`}
-          renderItem={renderTaskCard}
-          ListHeaderComponent={renderListHeader}
-          contentContainerStyle={[
-            styles.listContent,
-            selectedTasks.length > 0 && styles.listContentWithBottomBar,
-          ]}
-        />
+        viewMode === 'product' ? (
+          <FlatList
+            data={productGroups}
+            keyExtractor={(item) => item.productId}
+            renderItem={renderProductGroupCard}
+            contentContainerStyle={styles.listContent}
+          />
+        ) : (
+          <FlatList
+            data={queue}
+            keyExtractor={(item) => `${item.orderId}:${item.productId}`}
+            renderItem={renderTaskCard}
+            contentContainerStyle={[
+              styles.listContent,
+              selectedTasks.length > 0 && styles.listContentWithBottomBar,
+            ]}
+          />
+        )
       ) : (
         <View style={styles.centered}>
           <MaterialCommunityIcons name="check-decagram-outline" size={56} color="#10B981" />
@@ -335,8 +475,8 @@ export default function OrderQueueList({
         </View>
       )}
 
-      {/* Floating Bottom Bar when 1 or more tasks selected */}
-      {selectedTasks.length > 0 && (
+      {/* Floating Bottom Bar when 1 or more tasks selected in By Order mode */}
+      {viewMode === 'order' && selectedTasks.length > 0 && (
         <View style={styles.floatingBottomBar}>
           <View style={styles.floatingBarInfo}>
             <Text style={styles.floatingBarTitle}>
@@ -402,7 +542,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
@@ -434,12 +574,172 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
   },
+  viewModeContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    padding: 3,
+    gap: 4,
+  },
+  viewModeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 9,
+    gap: 6,
+  },
+  viewModeBtnActive: {
+    backgroundColor: '#1A73E8',
+    shadowColor: '#1A73E8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  viewModeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  viewModeTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
   listContent: {
     padding: 16,
     paddingBottom: 40,
   },
   listContentWithBottomBar: {
     paddingBottom: 110,
+  },
+  productCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  productCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  productIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  productTitleArea: {
+    flex: 1,
+  },
+  productCardTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  productCardSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  productStatsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  productStatBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  productStatNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A73E8',
+  },
+  productStatLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  ordersTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 6,
+  },
+  ordersTagLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  ordersPillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    flex: 1,
+  },
+  orderNoPill: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  orderNoPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1E40AF',
+  },
+  sizesContainer: {
+    marginBottom: 14,
+    gap: 4,
+  },
+  sizeItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  moreSizesText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  productActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1A73E8',
+    height: 46,
+    borderRadius: 10,
+  },
+  productActionBtnPressed: {
+    backgroundColor: '#1557B0',
+  },
+  productActionBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   card: {
     backgroundColor: '#FFFFFF',
@@ -493,6 +793,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#64748B',
+  },
+  partialBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  partialBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#D97706',
   },
   customerName: {
     fontSize: 13,
@@ -697,69 +1011,5 @@ const styles = StyleSheet.create({
     color: '#93C5FD',
     fontSize: 13,
     fontWeight: '600',
-  },
-  bannerContainer: {
-    marginBottom: 8,
-  },
-  batchBanner: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1.5,
-    borderColor: '#BFDBFE',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    shadowColor: '#1A73E8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  batchBannerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 10,
-  },
-  batchIconWrapper: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#DBEAFE',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  batchBannerText: {
-    flex: 1,
-  },
-  batchBannerTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1E3A8A',
-  },
-  batchBannerSubtitle: {
-    fontSize: 12,
-    color: '#3B82F6',
-    marginTop: 2,
-  },
-  batchBannerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#1A73E8',
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  batchBannerBtnPressed: {
-    backgroundColor: '#1557B0',
-  },
-  batchBannerBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
 });

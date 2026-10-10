@@ -15,6 +15,8 @@ interface CutCanvasProps {
   wastedRects: WastedRect[];
   kerfCuts: KerfCut[];
   kerfMm: number;
+  selectedPieceId?: string | null;
+  onSelectPiece?: (id: string | null) => void;
   onUpdatePosition: (pieceId: string, x_mm: number, y_mm: number) => void;
   onRotatePiece: (pieceId: string) => void;
   onMoveToSheet: (pieceId: string, targetSheetId: string) => void;
@@ -30,6 +32,8 @@ export default function CutCanvas({
   wastedRects,
   kerfCuts,
   kerfMm,
+  selectedPieceId: selectedPieceIdProp,
+  onSelectPiece,
   onUpdatePosition,
   onRotatePiece,
   onMoveToSheet,
@@ -40,13 +44,20 @@ export default function CutCanvas({
     width: 0,
     height: 0,
   });
-  const [selectedPieceId, setSelectedPieceId] = useState<string | null>(null);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
+
+  const isExternalControl = onSelectPiece !== undefined;
+  const currentSelectedId = isExternalControl ? (selectedPieceIdProp ?? null) : internalSelectedId;
 
   // Clear piece selection whenever active sheet changes
   useEffect(() => {
-    setSelectedPieceId(null);
-  }, [sheet.id]);
+    if (isExternalControl) {
+      onSelectPiece(null);
+    } else {
+      setInternalSelectedId(null);
+    }
+  }, [sheet.id, isExternalControl, onSelectPiece]);
 
   function handleLayout(e: LayoutChangeEvent) {
     const { width, height } = e.nativeEvent.layout;
@@ -87,7 +98,7 @@ export default function CutCanvas({
   }, [sheet.is_lining, originX, sheetPxW]);
 
   const isLining = sheet.is_lining ?? false;
-  const selectedPiece = placedPieces.find((p) => p.id === selectedPieceId);
+  const selectedPiece = placedPieces.find((p) => p.id === currentSelectedId);
 
   return (
     <View style={styles.container} onLayout={handleLayout}>
@@ -256,17 +267,21 @@ export default function CutCanvas({
                 originY={originY}
                 kerfMm={kerfMm}
                 otherPiecesOnSheet={others}
-                isSelected={piece.id === selectedPieceId}
-                onSelect={() =>
-                  setSelectedPieceId((curr) => (curr === piece.id ? null : piece.id))
-                }
+                isSelected={piece.id === currentSelectedId}
+                onSelect={() => {
+                  if (isExternalControl && onSelectPiece) {
+                    onSelectPiece(currentSelectedId === piece.id ? null : piece.id);
+                  } else {
+                    setInternalSelectedId((curr) => (curr === piece.id ? null : piece.id));
+                  }
+                }}
                 onUpdatePosition={onUpdatePosition}
               />
             );
           })}
 
-          {/* Docked Action Toolbar for Selected Piece */}
-          {selectedPiece && (
+          {/* Docked Action Toolbar for Selected Piece (only if not controlled externally) */}
+          {!isExternalControl && selectedPiece && (
             <View style={styles.selectedPieceToolbar}>
               <View style={styles.selectedPieceHeader}>
                 <View style={styles.selectedPieceBadge}>
@@ -281,7 +296,7 @@ export default function CutCanvas({
 
                 <Pressable
                   style={styles.closeToolbarBtn}
-                  onPress={() => setSelectedPieceId(null)}
+                  onPress={() => setInternalSelectedId(null)}
                   hitSlop={8}
                 >
                   <MaterialCommunityIcons name="close" size={18} color="#94A3B8" />
@@ -313,7 +328,7 @@ export default function CutCanvas({
                     ]}
                     onPress={() => {
                       onMoveToNextSheet(selectedPiece.id);
-                      setSelectedPieceId(null);
+                      setInternalSelectedId(null);
                     }}
                   >
                     <MaterialCommunityIcons
@@ -352,7 +367,7 @@ export default function CutCanvas({
                   ]}
                   onPress={() => {
                     onRemoveToTray(selectedPiece.id);
-                    setSelectedPieceId(null);
+                    setInternalSelectedId(null);
                   }}
                 >
                   <MaterialCommunityIcons
@@ -366,12 +381,13 @@ export default function CutCanvas({
             </View>
           )}
 
-          {/* Move Sheet Modal */}
-          <Modal
-            visible={moveModalVisible && !!selectedPiece}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setMoveModalVisible(false)}
+          {/* Move Sheet Modal (only if not controlled externally) */}
+          {!isExternalControl && (
+            <Modal
+              visible={moveModalVisible && !!selectedPiece}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setMoveModalVisible(false)}
             statusBarTranslucent
           >
             <Pressable
@@ -397,7 +413,7 @@ export default function CutCanvas({
                         setMoveModalVisible(false);
                         if (selectedPiece) {
                           onMoveToSheet(selectedPiece.id, targetSheet.id);
-                          setSelectedPieceId(null);
+                          setInternalSelectedId(null);
                         }
                       }}
                     >
@@ -425,6 +441,7 @@ export default function CutCanvas({
               </View>
             </Pressable>
           </Modal>
+          )}
         </>
       )}
     </View>

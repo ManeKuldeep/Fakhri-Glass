@@ -37,6 +37,7 @@ export interface CuttingQueueTask {
   color: string | null;
   isLining: boolean;
   totalPiecesCount: number;
+  isPartiallyCut?: boolean;
   orderItems: {
     orderItemId: string;
     orderId: string;
@@ -45,6 +46,8 @@ export interface CuttingQueueTask {
     widthMm: number;
     heightMm: number;
     qty: number;
+    originalQty?: number;
+    cutQty?: number;
     isPolished?: boolean;
     finishedWidthMm?: number;
     finishedHeightMm?: number;

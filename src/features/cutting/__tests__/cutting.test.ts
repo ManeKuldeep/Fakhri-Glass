@@ -8,7 +8,11 @@ jest.mock('../../../lib/supabase', () => ({
 import { useCuttingSettingsStore } from '../stores/cuttingSettingsStore';
 import { DEFAULT_OPTIMIZER_SETTINGS } from '../../../optimizer/types';
 import { piecesOverlap } from '../../../optimizer/validation';
-import { friendlyConfirmCutError, findBestPlacementOnSheet } from '../utils';
+import {
+  friendlyConfirmCutError,
+  findBestPlacementOnSheet,
+  canFitPieceOnSheet,
+} from '../utils';
 import { mergeCuttingQueueTasks } from '../queries';
 import { CuttingQueueTask } from '../types';
 
@@ -74,6 +78,11 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
     it('translates "does not match ordered quantity" error', () => {
       const msg = friendlyConfirmCutError('Piece count (2) does not match ordered quantity (3)');
       expect(msg).toContain('does not match the ordered quantity');
+    });
+
+    it('translates "exceeded ordered quantity" error for partial cut plans', () => {
+      const msg = friendlyConfirmCutError('Exceeded ordered quantity for item oi-123');
+      expect(msg).toContain('exceed the ordered quantity');
     });
 
     it('translates "do not belong to this order" validation error', () => {
@@ -204,6 +213,49 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
       const result = mergeCuttingQueueTasks([singleTask]);
       expect(result).toBe(singleTask);
     });
+
+    it('correctly sets isPartiallyCut flag if any merged task is partially cut', () => {
+      const taskNormal: CuttingQueueTask = {
+        orderId: 'order-1',
+        orderIds: ['order-1'],
+        orderNo: 101,
+        orderNos: [101],
+        store: 'mumbai',
+        customerName: 'Customer A',
+        customerPhone: '1111111111',
+        productId: 'prod-clear-5',
+        productName: 'Clear Glass',
+        categoryName: 'Float Glass',
+        thicknessMm: 5,
+        color: null,
+        isLining: false,
+        totalPiecesCount: 2,
+        isPartiallyCut: false,
+        orderItems: [],
+      };
+
+      const taskPartial: CuttingQueueTask = {
+        orderId: 'order-2',
+        orderIds: ['order-2'],
+        orderNo: 102,
+        orderNos: [102],
+        store: 'mumbai',
+        customerName: 'Customer B',
+        customerPhone: '2222222222',
+        productId: 'prod-clear-5',
+        productName: 'Clear Glass',
+        categoryName: 'Float Glass',
+        thicknessMm: 5,
+        color: null,
+        isLining: false,
+        totalPiecesCount: 1,
+        isPartiallyCut: true,
+        orderItems: [],
+      };
+
+      const merged = mergeCuttingQueueTasks([taskNormal, taskPartial]);
+      expect(merged.isPartiallyCut).toBe(true);
+    });
   });
 
   describe('findBestPlacementOnSheet', () => {
@@ -239,6 +291,29 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
       const pos = findBestPlacementOnSheet(sheet, 700, 400, existing, kerf);
       expect(pos.x_mm + 700).toBeLessThanOrEqual(sheet.width_mm);
       expect(pos.y_mm + 400).toBeLessThanOrEqual(sheet.height_mm);
+    });
+  });
+
+  describe('canFitPieceOnSheet', () => {
+    const sheet = { width_mm: 2000, height_mm: 1500 };
+
+    it('returns true when piece fits directly without rotation', () => {
+      expect(canFitPieceOnSheet(sheet, { width_mm: 1000, height_mm: 800 })).toBe(true);
+    });
+
+    it('returns true when piece fits with 90 degree rotation for standard glass', () => {
+      // 1600 exceeds 1500 height, but rotated 1600x1200 fits in 2000x1500
+      expect(canFitPieceOnSheet(sheet, { width_mm: 1200, height_mm: 1600 }, false)).toBe(true);
+    });
+
+    it('returns false when piece exceeds both dimensions', () => {
+      expect(canFitPieceOnSheet(sheet, { width_mm: 2100, height_mm: 1600 }, false)).toBe(false);
+    });
+
+    it('disallows rotation for lining glass', () => {
+      // For lining glass, width_mm cannot exceed sheet.width_mm and height_mm cannot exceed sheet.height_mm
+      expect(canFitPieceOnSheet(sheet, { width_mm: 1200, height_mm: 1600 }, true)).toBe(false);
+      expect(canFitPieceOnSheet(sheet, { width_mm: 1200, height_mm: 1400 }, true)).toBe(true);
     });
   });
 });

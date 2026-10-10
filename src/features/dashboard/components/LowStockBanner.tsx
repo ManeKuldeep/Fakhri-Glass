@@ -65,21 +65,34 @@ export default function LowStockBanner() {
     );
   }
 
+  const hasOutOfStock = lowStockItems.some((i) => i.reason === 'out_of_stock');
+  const outOfStockCount = lowStockItems.filter((i) => i.reason === 'out_of_stock').length;
+
   return (
-    <View style={[styles.card, styles.alertCard]}>
+    <View style={[styles.card, styles.alertCard, hasOutOfStock && styles.urgentCard]}>
       {/* Header */}
       <View style={styles.alertHeader}>
         <View style={styles.alertHeaderLeft}>
-          <MaterialCommunityIcons name="alert-circle" size={22} color="#D97706" />
-          <Text style={styles.alertTitle}>
-            {lowStockItems.length} {lowStockItems.length === 1 ? 'Product' : 'Products'} Low on Stock
+          <MaterialCommunityIcons
+            name={hasOutOfStock ? 'alert-decagram' : 'alert-circle'}
+            size={22}
+            color={hasOutOfStock ? '#DC2626' : '#D97706'}
+          />
+          <Text style={[styles.alertTitle, hasOutOfStock && styles.urgentTitle]}>
+            {hasOutOfStock
+              ? `${outOfStockCount} Out of Stock · ${lowStockItems.length} Total Alerts`
+              : `${lowStockItems.length} ${lowStockItems.length === 1 ? 'Product' : 'Products'} Low on Stock`}
           </Text>
         </View>
         <Pressable
-          style={({ pressed }) => [styles.viewBtn, pressed && styles.viewBtnPressed]}
+          style={({ pressed }) => [
+            styles.viewBtn,
+            hasOutOfStock && styles.urgentViewBtn,
+            pressed && styles.viewBtnPressed,
+          ]}
           onPress={() => router.push('/(tabs)/inventory')}
         >
-          <Text style={styles.viewBtnText}>View Stock</Text>
+          <Text style={[styles.viewBtnText, hasOutOfStock && styles.urgentViewBtnText]}>View Stock</Text>
         </Pressable>
       </View>
 
@@ -89,19 +102,28 @@ export default function LowStockBanner() {
           const current = item.sheets ?? 0;
           const min = item.min_stock_sheets ?? 0;
           const shortage = Math.max(0, min - current);
+          const isOutOfStock = item.reason === 'out_of_stock';
+
+          let subtext = `${current} available · Min required: ${min}`;
+          if (isOutOfStock) {
+            subtext = `0 available in stock · ${item.pending_orders_count ?? 1} pending order${(item.pending_orders_count ?? 1) > 1 ? 's' : ''}`;
+          }
 
           return (
-            <View key={item.product_id ?? item.name} style={styles.itemRow}>
+            <View
+              key={item.product_id ?? item.name}
+              style={[styles.itemRow, isOutOfStock && styles.itemRowOutOfStock]}
+            >
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemSubtext}>
-                  {current} available · Min required: {min}
+                <Text style={[styles.itemSubtext, isOutOfStock && styles.itemSubtextOutOfStock]}>
+                  {subtext}
                 </Text>
               </View>
 
-              <View style={styles.badgeBox}>
-                <Text style={styles.shortageText}>
-                  -{shortage} {shortage === 1 ? 'sheet' : 'sheets'}
+              <View style={[styles.badgeBox, isOutOfStock && styles.badgeBoxOutOfStock]}>
+                <Text style={[styles.shortageText, isOutOfStock && styles.shortageTextOutOfStock]}>
+                  {isOutOfStock ? '0 in stock' : `-${shortage} ${shortage === 1 ? 'sheet' : 'sheets'}`}
                 </Text>
               </View>
             </View>
@@ -206,6 +228,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFBEB',
     borderColor: '#FCD34D',
   },
+  urgentCard: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
   alertHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -223,11 +249,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#92400E',
   },
+  urgentTitle: {
+    color: '#991B1B',
+  },
   viewBtn: {
     backgroundColor: '#FDE68A',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
+  },
+  urgentViewBtn: {
+    backgroundColor: '#FEE2E2',
   },
   viewBtnPressed: {
     opacity: 0.7,
@@ -236,6 +268,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#78350F',
+  },
+  urgentViewBtnText: {
+    color: '#991B1B',
   },
   itemsList: {
     gap: 8,
@@ -249,6 +284,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#FEF3C7',
+  },
+  itemRowOutOfStock: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FFFBFB',
   },
   itemInfo: {
     flex: 1,
@@ -264,17 +303,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
   },
+  itemSubtextOutOfStock: {
+    color: '#B91C1C',
+    fontWeight: '500',
+  },
   badgeBox: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#FFFBEB',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  badgeBoxOutOfStock: {
+    backgroundColor: '#FEF2F2',
     borderColor: '#FECACA',
   },
   shortageText: {
     fontSize: 12,
     fontWeight: '700',
+    color: '#D97706',
+  },
+  shortageTextOutOfStock: {
     color: '#DC2626',
   },
 });

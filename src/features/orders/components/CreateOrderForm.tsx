@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useCategories, useProducts } from '../../inventory/queries';
+import { useCategories, useProducts, useStockItems } from '../../inventory/queries';
 import { useCustomerSearch } from '../queries';
 import { useCreateOrder } from '../mutations';
 import { STORES } from '../../../constants/stores';
@@ -412,6 +412,23 @@ function OrderItemEditor({
 }) {
   const { data: categories } = useCategories();
   const { data: products } = useProducts(item.categoryId);
+  const { data: stockItems } = useStockItems({ status: 'available' });
+
+  const stockCountByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    if (stockItems) {
+      for (const s of stockItems) {
+        if (s.product_id) {
+          map.set(s.product_id, (map.get(s.product_id) || 0) + 1);
+        }
+      }
+    }
+    return map;
+  }, [stockItems]);
+
+  const selectedProductStock = item.productId
+    ? (stockCountByProduct.get(item.productId) ?? 0)
+    : null;
 
   return (
     <View style={styles.itemEditor}>
@@ -455,20 +472,46 @@ function OrderItemEditor({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}
           >
-            {products?.map((prod) => (
-              <Pressable
-                key={prod.id}
-                onPress={() => onUpdate(item.key, { productId: prod.id })}
-                style={[styles.chip, item.productId === prod.id && styles.chipSelected]}
-              >
-                <Text style={[styles.chipText, item.productId === prod.id && styles.chipTextSelected]}>
-                  {prod.name}
-                  {prod.color ? ` (${prod.color})` : ''}
-                  {` ${prod.thickness_mm}mm`}
-                </Text>
-              </Pressable>
-            ))}
+            {products?.map((prod) => {
+              const stock = stockCountByProduct.get(prod.id) ?? 0;
+              const isSelected = item.productId === prod.id;
+              return (
+                <Pressable
+                  key={prod.id}
+                  onPress={() => onUpdate(item.key, { productId: prod.id })}
+                  style={[
+                    styles.chip,
+                    isSelected && styles.chipSelected,
+                    stock === 0 && !isSelected && styles.chipZeroStock,
+                  ]}
+                >
+                  <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                    {prod.name}
+                    {prod.color ? ` (${prod.color})` : ''}
+                    {` ${prod.thickness_mm}mm`}
+                    <Text
+                      style={[
+                        styles.chipStockBadge,
+                        stock === 0 ? styles.chipStockZero : styles.chipStockAvailable,
+                        isSelected && styles.chipStockSelected,
+                      ]}
+                    >
+                      {` · ${stock} stock`}
+                    </Text>
+                  </Text>
+                </Pressable>
+              );
+            })}
           </ScrollView>
+
+          {selectedProductStock === 0 ? (
+            <View style={styles.outOfStockNotice}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#DC2626" />
+              <Text style={styles.outOfStockNoticeText}>
+                0 sheets in inventory for this glass type. You can create the order, and it will be flagged for restocking.
+              </Text>
+            </View>
+          ) : null}
         </>
       ) : null}
 
@@ -815,6 +858,41 @@ const styles = StyleSheet.create({
   polishNoticeBold: {
     fontWeight: '700',
     color: '#047857',
+  },
+  chipZeroStock: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FFF5F5',
+  },
+  chipStockBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  chipStockAvailable: {
+    color: '#059669',
+  },
+  chipStockZero: {
+    color: '#DC2626',
+    fontWeight: '700',
+  },
+  chipStockSelected: {
+    color: '#E0E7FF',
+  },
+  outOfStockNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 8,
+  },
+  outOfStockNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#991B1B',
+    lineHeight: 16,
   },
 });
 

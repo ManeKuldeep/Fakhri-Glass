@@ -16,6 +16,9 @@ export function friendlyConfirmCutError(message: string): string {
   if (lower.includes('does not match ordered quantity')) {
     return 'Piece count does not match the ordered quantity. Please ensure all ordered pieces are placed.';
   }
+  if (lower.includes('exceeded ordered quantity')) {
+    return 'Total cut pieces would exceed the ordered quantity for one or more items.';
+  }
   if (lower.includes('do not belong to this order')) {
     return 'One or more pieces do not belong to this order and product.';
   }
@@ -277,4 +280,22 @@ export function findBestPlacementOnSheet(
 
   // If no collision-free point fits within boundaries, fallback to (0, 0)
   return { x_mm: 0, y_mm: 0 };
+}
+
+/**
+ * Checks whether a piece can physically fit on a sheet.
+ * If isLining is true, the piece cannot be rotated.
+ */
+export function canFitPieceOnSheet(
+  sheet: { width_mm: number; height_mm: number },
+  piece: { width_mm: number; height_mm: number },
+  isLining?: boolean,
+): boolean {
+  if (isLining) {
+    return piece.width_mm <= sheet.width_mm && piece.height_mm <= sheet.height_mm;
+  }
+  return (
+    (piece.width_mm <= sheet.width_mm && piece.height_mm <= sheet.height_mm) ||
+    (piece.height_mm <= sheet.width_mm && piece.width_mm <= sheet.height_mm)
+  );
 }

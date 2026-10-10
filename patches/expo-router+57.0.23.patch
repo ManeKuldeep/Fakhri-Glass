@@ -1,0 +1,22 @@
+diff --git a/node_modules/expo-router/build/fork/NavigationContainer.js b/node_modules/expo-router/build/fork/NavigationContainer.js
+index cdfcf79..b4931a2 100644
+--- a/node_modules/expo-router/build/fork/NavigationContainer.js
++++ b/node_modules/expo-router/build/fork/NavigationContainer.js
+@@ -41,11 +41,16 @@
+     (0, useDocumentTitle_1.useDocumentTitle)(refContainer, documentTitle);
+     (0, imperative_api_1.useImperativeApiEmitter)(refContainer);
+     const [lastUnhandledLink, setLastUnhandledLink] = react_1.default.useState();
++    const safeSetLastUnhandledLink = (value) => {
++        setTimeout(() => {
++            setLastUnhandledLink(value);
++        }, 0);
++    };
+     const { getInitialState } = (0, useLinking_1.useLinking)(refContainer, {
+         enabled: isLinkingEnabled,
+         prefixes: [],
+         ...linking,
+-    }, setLastUnhandledLink);
++    }, safeSetLastUnhandledLink);
+     const linkingContext = react_1.default.useMemo(() => ({ options: linking }), [linking]);
+     const unhandledLinkingContext = react_1.default.useMemo(() => ({ lastUnhandledLink, setLastUnhandledLink }), [lastUnhandledLink, setLastUnhandledLink]);
+     const onReadyForLinkingHandling = (0, useLatestCallback_1.default)(() => {

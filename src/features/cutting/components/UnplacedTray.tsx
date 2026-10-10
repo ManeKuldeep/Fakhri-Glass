@@ -7,12 +7,14 @@ interface UnplacedTrayProps {
   pieces: CuttingPiece[];
   onPlacePieceOnCurrentSheet: (piece: CuttingPiece) => void;
   onPlacePieceOnNextSheet?: (piece: CuttingPiece) => void;
+  onPackAllToNewSheet?: () => void;
 }
 
 export default function UnplacedTray({
   pieces,
   onPlacePieceOnCurrentSheet,
   onPlacePieceOnNextSheet,
+  onPackAllToNewSheet,
 }: UnplacedTrayProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -27,22 +29,35 @@ export default function UnplacedTray({
 
   return (
     <View style={styles.container}>
-      <Pressable
-        style={styles.header}
-        onPress={() => setCollapsed(!collapsed)}
-      >
-        <View style={styles.headerLeft}>
+      <View style={styles.header}>
+        <Pressable
+          style={styles.headerLeft}
+          onPress={() => setCollapsed(!collapsed)}
+        >
           <MaterialCommunityIcons name="tray-full" size={18} color="#D97706" />
           <Text style={styles.headerTitle}>
-            Unplaced Pieces ({pieces.length})
+            Unplaced ({pieces.length}) · On Hold
           </Text>
-        </View>
-        <MaterialCommunityIcons
-          name={collapsed ? 'chevron-up' : 'chevron-down'}
-          size={20}
-          color="#64748B"
-        />
-      </Pressable>
+          <MaterialCommunityIcons
+            name={collapsed ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color="#64748B"
+          />
+        </Pressable>
+
+        {onPackAllToNewSheet && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.packAllBtn,
+              pressed && styles.packAllBtnPressed,
+            ]}
+            onPress={onPackAllToNewSheet}
+          >
+            <MaterialCommunityIcons name="lightning-bolt" size={14} color="#FFFFFF" />
+            <Text style={styles.packAllBtnText}>Pack on New Sheet</Text>
+          </Pressable>
+        )}
+      </View>
 
       {!collapsed && (
         <ScrollView
@@ -125,6 +140,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#92400E',
+  },
+  packAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#D97706',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  packAllBtnPressed: {
+    backgroundColor: '#B45309',
+  },
+  packAllBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   scrollContent: {
     paddingHorizontal: 16,

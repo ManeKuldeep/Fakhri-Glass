@@ -14,21 +14,7 @@ interface FetchQueueFilters {
 }
 
 export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<CuttingQueueTask[]> {
-  // 1. Fetch all confirmed cut plans to exclude already confirmed items
-  const { data: confirmedPlans, error: plansErr } = await supabase
-    .from('cut_plans')
-    .select('order_id, product_id');
-
-  if (plansErr) throw new Error(plansErr.message);
-
-  const confirmedSet = new Set<string>();
-  if (confirmedPlans) {
-    for (const cp of confirmedPlans) {
-      confirmedSet.add(`${cp.order_id}:${cp.product_id}`);
-    }
-  }
-
-  // 2. Fetch orders in 'new' or 'cutting' status
+  // 1. Fetch active orders in 'new' or 'cutting' status
   let query = supabase
     .from('orders')
     .select(
@@ -73,9 +59,28 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
 
   const { data: orders, error } = await query;
   if (error) throw new Error(error.message);
-  if (!orders) return [];
+  if (!orders || orders.length === 0) return [];
 
-  // Group by (order_id, product_id)
+  // 2. Fetch cut_pieces ONLY for active orders' items to calculate uncut quantities
+  const activeOrderItemIds = orders.flatMap((o) => o.order_items.map((i) => i.id));
+  const cutCounts = new Map<string, number>();
+
+  if (activeOrderItemIds.length > 0) {
+    const { data: cutPieces, error: cpErr } = await supabase
+      .from('cut_pieces')
+      .select('order_item_id')
+      .in('order_item_id', activeOrderItemIds);
+
+    if (cpErr) throw new Error(cpErr.message);
+
+    if (cutPieces) {
+      for (const cp of cutPieces) {
+        cutCounts.set(cp.order_item_id, (cutCounts.get(cp.order_item_id) || 0) + 1);
+      }
+    }
+  }
+
+  // 3. Group by (order_id, product_id)
   const taskMap = new Map<string, CuttingQueueTask>();
 
   for (const order of orders) {
@@ -83,8 +88,10 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
       const prod = item.product;
       const key = `${order.id}:${prod.id}`;
 
-      // Skip if this product in this order already has a confirmed cut plan
-      if (confirmedSet.has(key)) continue;
+      // Calculate uncut pieces remaining for this order item
+      const cutCount = cutCounts.get(item.id) ?? 0;
+      const remainingQty = item.qty - cutCount;
+      if (remainingQty <= 0) continue; // All pieces of this item are already cut
 
       if (!taskMap.has(key)) {
         taskMap.set(key, {
@@ -102,6 +109,7 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
           color: prod.color,
           isLining: prod.is_lining,
           totalPiecesCount: 0,
+          isPartiallyCut: order.status === 'cutting' || cutCount > 0,
           orderItems: [],
           ordersSummary: [
             {
@@ -116,12 +124,15 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
       }
 
       const task = taskMap.get(key)!;
+      if (order.status === 'cutting' || cutCount > 0) {
+        task.isPartiallyCut = true;
+      }
       const isPolished = Boolean(item.is_polished);
       const allowance = isPolished ? 3 : 0;
 
-      task.totalPiecesCount += item.qty;
+      task.totalPiecesCount += remainingQty;
       if (task.ordersSummary && task.ordersSummary.length > 0) {
-        task.ordersSummary[0].piecesCount += item.qty;
+        task.ordersSummary[0].piecesCount += remainingQty;
       }
       task.orderItems.push({
         orderItemId: item.id,
@@ -130,7 +141,9 @@ export async function fetchCuttingQueue(filters?: FetchQueueFilters): Promise<Cu
         customerName: order.customer.name,
         widthMm: item.width_mm + allowance,
         heightMm: item.height_mm + allowance,
-        qty: item.qty,
+        qty: remainingQty,
+        originalQty: item.qty,
+        cutQty: cutCount,
         isPolished,
         finishedWidthMm: item.width_mm,
         finishedHeightMm: item.height_mm,
@@ -173,6 +186,8 @@ export function mergeCuttingQueueTasks(tasks: CuttingQueueTask[]): CuttingQueueT
     }
   }
 
+  const isAnyPartiallyCut = tasks.some((t) => t.isPartiallyCut);
+
   return {
     ...base,
     orderId: base.orderId,
@@ -181,6 +196,7 @@ export function mergeCuttingQueueTasks(tasks: CuttingQueueTask[]): CuttingQueueT
     orderNos: allOrderNos,
     customerName: `${allOrderNos.length} Orders (${allOrderNos.map((n) => `#${n}`).join(', ')})`,
     totalPiecesCount: totalPieces,
+    isPartiallyCut: isAnyPartiallyCut,
     orderItems: allOrderItems,
     ordersSummary: allSummaries,
   };
@@ -210,6 +226,7 @@ export function useCuttingQueue(store?: string) {
   return useQuery({
     queryKey: cuttingKeys.queue(store),
     queryFn: () => fetchCuttingQueue({ store }),
+    refetchInterval: 10000,
   });
 }
 
