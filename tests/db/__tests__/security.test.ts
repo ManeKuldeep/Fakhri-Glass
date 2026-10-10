@@ -295,4 +295,337 @@ describe('Database Security, RLS & Grant Tests (SEC-03..07, SEC-10..14, INV-07)'
       expect(stockUpdateErr).toBeNull();
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // FINDING-06 / MULTI-01: Cross-Shop Ownership Validations in Order RPCs
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('FINDING-06 [MULTI-01]: Order RPC Multi-Tenant Ownership Checks', () => {
+    let custAId: string;
+    let custBId: string;
+    let prodAId: string;
+    let prodBId: string;
+
+    beforeAll(async () => {
+      // 1. Get Product A in Shop A
+      const { data: pA } = await adminClient
+        .from('products')
+        .select('id')
+        .eq('shop_id', shopAId)
+        .limit(1)
+        .single();
+      prodAId = pA!.id;
+
+      // 2. Ensure Product B exists in Shop B
+      const { data: existingPB } = await adminClient
+        .from('products')
+        .select('id')
+        .eq('shop_id', shopBId)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingPB) {
+        prodBId = existingPB.id;
+      } else {
+        let catBId: string;
+        const { data: catB } = await adminClient
+          .from('categories')
+          .select('id')
+          .eq('shop_id', shopBId)
+          .limit(1)
+          .maybeSingle();
+
+        if (catB) {
+          catBId = catB.id;
+        } else {
+          const { data: newCatB, error: catBErr } = await adminClient
+            .from('categories')
+            .insert({ shop_id: shopBId, name: 'Competitor Category' })
+            .select('id')
+            .single();
+          if (catBErr || !newCatB) throw new Error(`Failed to create category for Shop B: ${catBErr?.message}`);
+          catBId = newCatB.id;
+        }
+
+        const { data: newPB, error: pBErr } = await adminClient
+          .from('products')
+          .insert({
+            shop_id: shopBId,
+            category_id: catBId,
+            name: 'Competitor Float 5mm',
+            thickness_mm: 5,
+            color: 'Clear',
+            is_lining: false,
+          })
+          .select('id')
+          .single();
+        if (pBErr || !newPB) throw new Error(`Failed to create product for Shop B: ${pBErr?.message}`);
+        prodBId = newPB.id;
+      }
+
+      // 3. Create Customer in Shop A
+      const { data: cA, error: cAErr } = await userA.client
+        .from('customers')
+        .insert({ name: 'Shop A Customer', phone: `9111${Date.now().toString().slice(-6)}` })
+        .select('id')
+        .single();
+      if (cAErr || !cA) throw new Error(`Customer A create failed: ${cAErr?.message}`);
+      custAId = cA.id;
+
+      // 4. Create Customer in Shop B
+      const { data: cB, error: cBErr } = await userB.client
+        .from('customers')
+        .insert({ name: 'Shop B Customer', phone: `9222${Date.now().toString().slice(-6)}` })
+        .select('id')
+        .single();
+      if (cBErr || !cB) throw new Error(`Customer B create failed: ${cBErr?.message}`);
+      custBId = cB.id;
+    });
+
+    it('rejects creating an order with a customer belonging to another shop', async () => {
+      const { error } = await userA.client.rpc('create_order_with_items', {
+        p_customer_id: custBId,
+        p_store: 'mumbai',
+        p_items: [
+          {
+            product_id: prodAId,
+            width_mm: 500,
+            height_mm: 500,
+            qty: 1,
+            unit_price: 100,
+            is_polished: false,
+          },
+        ],
+      });
+
+      expect(error).not.toBeNull();
+      expect(error!.message).toMatch(/Customer not found or belongs to another shop/i);
+    });
+
+    it('rejects editing an order with a customer belonging to another shop', async () => {
+      // Create valid order in Shop A first
+      const { data: orderData, error: createErr } = await userA.client.rpc('create_order_with_items', {
+        p_customer_id: custAId,
+        p_store: 'mumbai',
+        p_items: [
+          {
+            product_id: prodAId,
+            width_mm: 500,
+            height_mm: 500,
+            qty: 1,
+            unit_price: 100,
+            is_polished: false,
+          },
+        ],
+      });
+      expect(createErr).toBeNull();
+      const orderId = (orderData as unknown as { id: string }[])[0].id;
+
+      // Attempt update with Shop B customer
+      const { error: updateErr } = await userA.client.rpc('update_order_with_items', {
+        p_order_id: orderId,
+        p_customer_id: custBId,
+        p_store: 'mumbai',
+        p_items: [
+          {
+            product_id: prodAId,
+            width_mm: 500,
+            height_mm: 500,
+            qty: 1,
+            unit_price: 100,
+            is_polished: false,
+          },
+        ],
+      });
+
+      expect(updateErr).not.toBeNull();
+      expect(updateErr!.message).toMatch(/Customer not found or belongs to another shop/i);
+    });
+
+    it('rejects creating an order with a product belonging to another shop', async () => {
+      const { error } = await userA.client.rpc('create_order_with_items', {
+        p_customer_id: custAId,
+        p_store: 'mumbai',
+        p_items: [
+          {
+            product_id: prodBId, // Shop B product
+            width_mm: 500,
+            height_mm: 500,
+            qty: 1,
+            unit_price: 100,
+            is_polished: false,
+          },
+        ],
+      });
+
+      expect(error).not.toBeNull();
+      expect(error!.message).toMatch(/One or more products not found or belong to another shop/i);
+    });
+
+    it('rejects editing an order with a product belonging to another shop', async () => {
+      // Create valid order in Shop A first
+      const { data: orderData, error: createErr } = await userA.client.rpc('create_order_with_items', {
+        p_customer_id: custAId,
+        p_store: 'mumbai',
+        p_items: [
+          {
+            product_id: prodAId,
+            width_mm: 500,
+            height_mm: 500,
+            qty: 1,
+            unit_price: 100,
+            is_polished: false,
+          },
+        ],
+      });
+      expect(createErr).toBeNull();
+      const orderId = (orderData as unknown as { id: string }[])[0].id;
+
+      // Attempt update with Shop B product
+      const { error: updateErr } = await userA.client.rpc('update_order_with_items', {
+        p_order_id: orderId,
+        p_customer_id: custAId,
+        p_store: 'mumbai',
+        p_items: [
+          {
+            product_id: prodBId, // Shop B product
+            width_mm: 500,
+            height_mm: 500,
+            qty: 1,
+            unit_price: 100,
+            is_polished: false,
+          },
+        ],
+      });
+
+      expect(updateErr).not.toBeNull();
+      expect(updateErr!.message).toMatch(/One or more products not found or belong to another shop/i);
+    });
+
+    it('successfully creates and edits order with non-empty payment_method and notes', async () => {
+      const { data: created, error: createErr } = await userA.client.rpc('create_order_with_items', {
+        p_customer_id: custAId,
+        p_store: 'mumbai',
+        p_payment_method: 'cash',
+        p_notes: 'Urgent Mumbai order',
+        p_items: [
+          {
+            product_id: prodAId,
+            width_mm: 600,
+            height_mm: 400,
+            qty: 2,
+            unit_price: 150,
+            is_polished: true,
+          },
+        ],
+      });
+
+      expect(createErr).toBeNull();
+      const orderId = (created as unknown as { id: string; order_no: number }[])[0].id;
+
+      // Verify payment_method and notes persisted
+      const { data: orderAfterCreate } = await userA.client
+        .from('orders')
+        .select('payment_method, notes, total')
+        .eq('id', orderId)
+        .single();
+      expect(orderAfterCreate?.payment_method).toBe('cash');
+      expect(orderAfterCreate?.notes).toBe('Urgent Mumbai order');
+      expect(Number(orderAfterCreate?.total)).toBe(300);
+
+      // Edit order with updated non-empty values
+      const { data: updated, error: updateErr } = await userA.client.rpc('update_order_with_items', {
+        p_order_id: orderId,
+        p_customer_id: custAId,
+        p_store: 'sanpada',
+        p_payment_method: 'upi',
+        p_notes: 'Rerouted to Sanpada',
+        p_paid: 100,
+        p_items: [
+          {
+            product_id: prodAId,
+            width_mm: 600,
+            height_mm: 400,
+            qty: 1,
+            unit_price: 150,
+            is_polished: false,
+          },
+        ],
+      });
+
+      expect(updateErr).toBeNull();
+      expect(updated).toBeDefined();
+
+      const { data: orderAfterUpdate } = await userA.client
+        .from('orders')
+        .select('store, payment_method, notes, total, paid')
+        .eq('id', orderId)
+        .single();
+      expect(orderAfterUpdate?.store).toBe('sanpada');
+      expect(orderAfterUpdate?.payment_method).toBe('upi');
+      expect(orderAfterUpdate?.notes).toBe('Rerouted to Sanpada');
+      expect(Number(orderAfterUpdate?.total)).toBe(150);
+      expect(Number(orderAfterUpdate?.paid)).toBe(100);
+    });
+
+    it('successfully creates and edits order with empty/null payment_method and notes', async () => {
+      const { data: created, error: createErr } = await userA.client.rpc('create_order_with_items', {
+        p_customer_id: custAId,
+        p_store: 'mumbai',
+        p_payment_method: '',
+        p_notes: '',
+        p_items: [
+          {
+            product_id: prodAId,
+            width_mm: 500,
+            height_mm: 500,
+            qty: 1,
+            unit_price: 200,
+            is_polished: false,
+          },
+        ],
+      });
+
+      expect(createErr).toBeNull();
+      const orderId = (created as unknown as { id: string; order_no: number }[])[0].id;
+
+      // Verify nullif converted empty strings to null
+      const { data: orderAfterCreate } = await userA.client
+        .from('orders')
+        .select('payment_method, notes')
+        .eq('id', orderId)
+        .single();
+      expect(orderAfterCreate?.payment_method).toBeNull();
+      expect(orderAfterCreate?.notes).toBeNull();
+
+      // Edit order with empty strings
+      const { error: updateErr } = await userA.client.rpc('update_order_with_items', {
+        p_order_id: orderId,
+        p_customer_id: custAId,
+        p_store: 'mumbai',
+        p_payment_method: '',
+        p_notes: '',
+        p_items: [
+          {
+            product_id: prodAId,
+            width_mm: 500,
+            height_mm: 500,
+            qty: 2,
+            unit_price: 200,
+            is_polished: false,
+          },
+        ],
+      });
+
+      expect(updateErr).toBeNull();
+
+      const { data: orderAfterUpdate } = await userA.client
+        .from('orders')
+        .select('payment_method, notes, total')
+        .eq('id', orderId)
+        .single();
+      expect(orderAfterUpdate?.payment_method).toBeNull();
+      expect(orderAfterUpdate?.notes).toBeNull();
+      expect(Number(orderAfterUpdate?.total)).toBe(400);
+    });
+  });
 });
