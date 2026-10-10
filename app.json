@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "com.fakhriglass.app",
+      "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
