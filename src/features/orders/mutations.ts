@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { friendlyDatabaseError } from '../../lib/friendlyDatabaseError';
 import { cuttingKeys } from '../cutting/queries';
 import { dashboardKeys } from '../dashboard/queries';
 import { inventoryKeys } from '../inventory/queries';
@@ -80,7 +81,7 @@ export function useCreateOrder() {
             .eq('id', customerId);
 
           if (updateErr) {
-            throw new Error(`Failed to update customer: ${updateErr.message}`);
+            throw new Error(friendlyDatabaseError(updateErr, 'Failed to update customer.'));
           }
         }
       } else {
@@ -96,7 +97,7 @@ export function useCreateOrder() {
           .single();
 
         if (custErr) {
-          throw new Error(`Failed to create customer: ${custErr.message}`);
+          throw new Error(friendlyDatabaseError(custErr, 'Failed to create customer.'));
         }
         customerId = newCustomer.id;
       }
@@ -122,7 +123,7 @@ export function useCreateOrder() {
         .single();
 
       if (rpcErr) {
-        throw new Error(`Failed to create order: ${rpcErr.message}`);
+        throw new Error(friendlyDatabaseError(rpcErr, 'Failed to create order.'));
       }
 
       const result = data as { id: string; order_no: number };
@@ -152,7 +153,7 @@ export function useUpdateOrder() {
         .eq('id', input.customerId);
 
       if (custErr) {
-        throw new Error(`Failed to update customer: ${custErr.message}`);
+        throw new Error(friendlyDatabaseError(custErr, 'Failed to update customer.'));
       }
 
       // 2. Call atomic RPC: reverts old cut plans/stock if needed, updates order & items
@@ -178,7 +179,7 @@ export function useUpdateOrder() {
         .single();
 
       if (rpcErr) {
-        throw new Error(`Failed to update order: ${rpcErr.message}`);
+        throw new Error(friendlyDatabaseError(rpcErr, 'Failed to update order.'));
       }
 
       const result = data as { id: string; order_no: number };
@@ -203,7 +204,7 @@ export function useCancelOrder() {
       });
 
       if (error) {
-        throw new Error(`Failed to cancel order: ${error.message}`);
+        throw new Error(friendlyDatabaseError(error, 'Failed to cancel order.'));
       }
 
       return data;
@@ -229,7 +230,7 @@ export function useMarkOrderDelivered() {
         .single();
 
       if (fetchErr) {
-        throw new Error(`Failed to fetch order: ${fetchErr.message}`);
+        throw new Error(friendlyDatabaseError(fetchErr, 'Failed to fetch order.'));
       }
 
       const { error } = await supabase
@@ -238,7 +239,7 @@ export function useMarkOrderDelivered() {
         .eq('id', orderId);
 
       if (error) {
-        throw new Error(`Failed to mark order as delivered: ${error.message}`);
+        throw new Error(friendlyDatabaseError(error, 'Failed to mark order as delivered.'));
       }
 
       await supabase.rpc('log_event', {

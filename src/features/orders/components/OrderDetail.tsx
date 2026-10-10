@@ -20,6 +20,7 @@ import { printOrShareOrderInvoice } from '../invoiceServices';
 import { OffcutThumbnail, OffcutInspectionModal } from '../../inventory/components/OffcutVisualizer';
 import OrderCutVisualizerModal from './OrderCutVisualizerModal';
 import EditOrderModal from './EditOrderModal';
+import { friendlyDatabaseError } from '../../../lib/friendlyDatabaseError';
 
 interface OrderDetailProps {
   visible: boolean;
@@ -65,8 +66,7 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
               await markDelivered.mutateAsync(order.id);
               Alert.alert('Order Delivered', `Order #${order.order_no} has been marked as delivered.`);
             } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : String(err);
-              Alert.alert('Delivery Update Failed', msg);
+              Alert.alert('Delivery Update Failed', friendlyDatabaseError(err));
             }
           },
         },
@@ -80,8 +80,7 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
       setIsGeneratingInvoice(true);
       await printOrShareOrderInvoice(order, { sharePdf });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Invoice Generation Failed', msg);
+      Alert.alert('Invoice Generation Failed', friendlyDatabaseError(err));
     } finally {
       setIsGeneratingInvoice(false);
     }
@@ -105,8 +104,7 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
             await cancelOrder.mutateAsync(order.id);
             Alert.alert('Order Cancelled', `Order #${order.order_no} has been marked as cancelled.`);
           } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            Alert.alert('Cancellation Failed', msg);
+            Alert.alert('Cancellation Failed', friendlyDatabaseError(err));
           }
         },
       },
@@ -119,8 +117,7 @@ export default function OrderDetail({ visible, onClose, orderId }: OrderDetailPr
       setIsPrinting(true);
       await printOrderLabels(order, { sharePdf });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Label Printing Failed', msg);
+      Alert.alert('Label Printing Failed', friendlyDatabaseError(err));
     } finally {
       setIsPrinting(false);
     }

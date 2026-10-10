@@ -17,6 +17,7 @@ import { useCustomerSearch, useCustomerByPhone } from '../queries';
 import { useCreateOrder } from '../mutations';
 import { STORES } from '../../../constants/stores';
 import { useAuthStore } from '../../../stores/authStore';
+import { friendlyDatabaseError } from '../../../lib/friendlyDatabaseError';
 import DimensionInput from '../../inventory/components/DimensionInput';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -217,7 +218,7 @@ export default function CreateOrderForm({ visible, onClose }: CreateOrderFormPro
           handleClose();
         },
         onError: (err) => {
-          Alert.alert('Error', err.message);
+          Alert.alert('Error', friendlyDatabaseError(err));
         },
       },
     );

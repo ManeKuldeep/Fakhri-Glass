@@ -21,6 +21,7 @@ import { useRouter } from 'expo-router';
 import { printOrderLabels } from '../../labels/services';
 import { OrderWithItemsForLabels } from '../../labels/types';
 import { computeSheetLeftovers, findBestPlacementOnSheet, canFitPieceOnSheet } from '../utils';
+import { friendlyDatabaseError } from '../../../lib/friendlyDatabaseError';
 import {
   CuttingPiece,
   CuttingQueueTask,
@@ -421,8 +422,7 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
       );
       return null;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Error', msg);
+      Alert.alert('Error', friendlyDatabaseError(err));
       return null;
     }
   };
@@ -816,8 +816,7 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
         await printOrderLabels(orderForLabels);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Label Printing Failed', msg);
+      Alert.alert('Label Printing Failed', friendlyDatabaseError(err));
     }
   };
 
@@ -966,7 +965,7 @@ export default function CutWorkspace({ task, onBack }: CutWorkspaceProps) {
               },
               onError: (err) => {
                 void refetchStock();
-                Alert.alert('Cannot Confirm Cut Plan', err.message);
+                Alert.alert('Cannot Confirm Cut Plan', friendlyDatabaseError(err));
               },
             },
           );

@@ -13,22 +13,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../src/lib/supabase';
 import { logEvent } from '../src/lib/logEvent';
 
+import { friendlyDatabaseError } from '../src/lib/friendlyDatabaseError';
 import FakhriLogo from '../src/components/common/FakhriLogo';
 
 /** Map common Supabase auth error messages to user-friendly text. */
 function friendlyError(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes('invalid login credentials')) {
-    return 'Invalid email or password. Please try again.';
-  }
-  if (lower.includes('email not confirmed')) {
-    return 'Your email has not been confirmed. Contact the admin.';
-  }
-  if (lower.includes('too many requests') || lower.includes('rate limit')) {
-    return 'Too many attempts. Please wait a minute and try again.';
-  }
-  // Fallback: show the message as-is (no raw JSON per AGENTS.md)
-  return message;
+  return friendlyDatabaseError(message);
 }
 
 export default function LoginScreen() {

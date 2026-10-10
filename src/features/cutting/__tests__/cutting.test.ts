@@ -101,9 +101,9 @@ describe('Cutting Feature Logic, Store & Error Translation Tests', () => {
       expect(msg).toBe('This order was cancelled or already completed. Please refresh the cutting queue.');
     });
 
-    it('passes through other errors unchanged', () => {
-      const msg = friendlyConfirmCutError('Network request failed');
-      expect(msg).toBe('Network request failed');
+    it('passes through custom plain business messages unchanged', () => {
+      const msg = friendlyConfirmCutError('Custom workshop note validation error');
+      expect(msg).toBe('Custom workshop note validation error');
     });
   });
 

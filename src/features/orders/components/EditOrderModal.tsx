@@ -17,6 +17,7 @@ import { useUpdateOrder } from '../mutations';
 import { OrderDetailData } from '../queries';
 import { STORES } from '../../../constants/stores';
 import { PAYMENT_METHODS } from '../constants';
+import { friendlyDatabaseError } from '../../../lib/friendlyDatabaseError';
 import DimensionInput from '../../inventory/components/DimensionInput';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -153,8 +154,7 @@ export default function EditOrderModal({
       Alert.alert('Order Updated', `Order #${order.order_no} has been updated successfully.`);
       onClose();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Update Failed', msg);
+      Alert.alert('Update Failed', friendlyDatabaseError(err));
     }
   }
 

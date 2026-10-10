@@ -16,6 +16,7 @@ import { handleAuthUserChange } from '../../src/lib/queryClient';
 import { cleanupAppTempFiles } from '../../src/lib/tempFileManager';
 import { useAuthStore } from '../../src/stores/authStore';
 import { exportShopBackup } from '../../src/features/settings/utils/exportBackup';
+import { friendlyDatabaseError } from '../../src/lib/friendlyDatabaseError';
 import FakhriLogo from '../../src/components/common/FakhriLogo';
 
 export default function SettingsScreen() {
@@ -33,7 +34,7 @@ export default function SettingsScreen() {
     } catch (err) {
       Alert.alert(
         'Export Failed',
-        err instanceof Error ? err.message : 'Could not export shop backup.',
+        friendlyDatabaseError(err, 'Could not export shop backup.'),
       );
     } finally {
       setIsExporting(false);

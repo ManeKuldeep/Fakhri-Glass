@@ -12,6 +12,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUpdateStock } from '../mutations';
+import { friendlyDatabaseError } from '../../../lib/friendlyDatabaseError';
 import DimensionInput from './DimensionInput';
 
 interface EditStockFormProps {
@@ -91,7 +92,7 @@ export default function EditStockForm({ visible, onClose, item }: EditStockFormP
           onClose();
         },
         onError: (err) => {
-          Alert.alert('Error', err.message);
+          Alert.alert('Error', friendlyDatabaseError(err));
         },
       },
     );

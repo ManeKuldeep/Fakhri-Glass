@@ -1,3 +1,5 @@
+import { friendlyDatabaseError } from '../../lib/friendlyDatabaseError';
+
 /**
  * Pure conversion helpers: mm ↔ ft/in.
  * All storage is integer millimetres; these are UI-only.
@@ -312,24 +314,10 @@ export function parseDimensionInput(input: string): number | null {
 
 /**
  * Translate a Postgres/Supabase error message to user-friendly text.
- * Specifically handles the check_lining_stock trigger.
+ * Specifically handles stock checks, lining triggers, and suppresses raw schema leaks.
  */
 export function friendlyStockError(message: string): string {
-  const lower = message.toLowerCase();
-  if (
-    lower.includes('vertical_line_height') ||
-    lower.includes('lining') ||
-    lower.includes('check_lining_stock')
-  ) {
-    return 'Figured glass (lining) requires a vertical line height. Please enter it before saving.';
-  }
-  if (lower.includes('width') && lower.includes('> 0')) {
-    return 'Width must be greater than zero.';
-  }
-  if (lower.includes('height') && lower.includes('> 0')) {
-    return 'Height must be greater than zero.';
-  }
-  return message;
+  return friendlyDatabaseError(message);
 }
 
 /** Calculate area in square feet from integer mm dimensions. */
