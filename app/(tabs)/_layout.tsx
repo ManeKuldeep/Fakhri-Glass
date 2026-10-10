@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ComponentProps } from 'react';
+import FakhriLogo from '../../src/components/common/FakhriLogo';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -48,6 +49,11 @@ export default function TabLayout() {
           name={tab.name}
           options={{
             title: tab.title,
+            ...(tab.name === 'index'
+              ? {
+                  headerTitle: () => <FakhriLogo variant="horizontal" size={26} />,
+                }
+              : {}),
             tabBarIcon: ({ color, focused, size }) => (
               <MaterialCommunityIcons
                 name={focused ? tab.focusedIcon : tab.icon}

@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from '../src/lib/supabase';
 import { useAuthStore } from '../src/stores/authStore';
 import type { UserProfile } from '../src/stores/authStore';
+import FakhriLogo from '../src/components/common/FakhriLogo';
 
 const queryClient = new QueryClient();
 
@@ -99,7 +100,8 @@ export default function RootLayout() {
     return (
       <View style={styles.loading}>
         <StatusBar style="dark" />
-        <ActivityIndicator size="large" color="#1A73E8" />
+        <FakhriLogo variant="badge" size={88} style={{ marginBottom: 20 }} />
+        <ActivityIndicator size="large" color="#A91D22" />
       </View>
     );
   }

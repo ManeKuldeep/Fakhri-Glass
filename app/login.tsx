@@ -13,6 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../src/lib/supabase';
 import { logEvent } from '../src/lib/logEvent';
 
+import FakhriLogo from '../src/components/common/FakhriLogo';
+
 /** Map common Supabase auth error messages to user-friendly text. */
 function friendlyError(message: string): string {
   const lower = message.toLowerCase();
@@ -75,9 +77,12 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.card}>
-        {/* App title */}
-        <Text style={styles.title}>Fakhri Glass</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
+        {/* App Logo & Title */}
+        <View style={styles.headerArea}>
+          <FakhriLogo variant="badge" size={80} style={styles.logoBadge} />
+          <Text style={styles.title}>FAKHRI GLASS</Text>
+          <Text style={styles.subtitle}>Workshop & Order Management</Text>
+        </View>
 
         {/* Error message */}
         {error ? (
@@ -158,18 +163,26 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
   },
+  headerArea: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  logoBadge: {
+    marginBottom: 14,
+  },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
     color: '#0F172A',
     textAlign: 'center',
+    letterSpacing: 0.5,
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 4,
   },
   errorContainer: {
     backgroundColor: '#FEF2F2',

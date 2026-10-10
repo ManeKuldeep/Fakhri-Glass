@@ -302,9 +302,29 @@ export function generateInvoiceHtml(order: OrderDetailData): string {
 </head>
 <body>
   <div class="header">
-    <div>
-      <div class="brand">FAKHRI GLASS</div>
-      <div class="store-tag">${storeLabel}</div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <svg viewBox="0 0 100 100" width="48" height="48" style="display: block; flex-shrink: 0;">
+        <defs>
+          <mask id="inv-fg-mask">
+            <rect width="100" height="100" fill="white" />
+            <circle cx="50" cy="50" r="32.5" fill="black" />
+            <rect x="75" y="38" width="30" height="12.5" fill="black" />
+          </mask>
+        </defs>
+        <circle cx="50" cy="50" r="40.5" fill="#A91D22" mask="url(#inv-fg-mask)" />
+        <rect x="40" y="50.5" width="49" height="8" fill="#A91D22" />
+        <g clip-path="url(#inv-circle-clip)">
+          <clipPath id="inv-circle-clip">
+            <circle cx="50" cy="50" r="40.5" />
+          </clipPath>
+          <rect x="40" y="36.5" width="8" height="54" fill="#A91D22" />
+          <path d="M 40 36.5 L 40 35.5 A 7 7 0 0 1 47 28.5 L 67 28.5 L 67 36.5 L 40 36.5 Z" fill="#A91D22" />
+        </g>
+      </svg>
+      <div>
+        <div class="brand">FAKHRI GLASS</div>
+        <div class="store-tag">${storeLabel}</div>
+      </div>
     </div>
     <div class="invoice-meta">
       <div class="invoice-title">INVOICE</div>

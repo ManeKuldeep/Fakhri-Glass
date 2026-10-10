@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/stores/authStore';
 import LowStockBanner from '../../src/features/dashboard/components/LowStockBanner';
+import FakhriLogo from '../../src/components/common/FakhriLogo';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function HomeScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Header ── */}
+      {/* ── Header with Brand Logo ── */}
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={styles.greeting}>
@@ -32,6 +33,7 @@ export default function HomeScreen() {
             <Text style={styles.dateText}>Fakhri Glass</Text>
           </View>
         </View>
+        <FakhriLogo variant="mark" size={46} />
       </View>
 
       {/* ── Low Stock Banner ── */}
@@ -83,11 +85,16 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 20,
     marginTop: 4,
   },
   headerText: {
+    flex: 1,
     gap: 4,
+    marginRight: 12,
   },
   greeting: {
     fontSize: 22,

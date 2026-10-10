@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+  <defs>
+    <mask id="fg-mask">
+      <rect width="100" height="100" fill="white" />
+      <!-- Cut out inner circle -->
+      <circle cx="50" cy="50" r="32.5" fill="black" />
+      <!-- Cut out top-right gap -->
+      <rect x="75" y="38" width="30" height="12.5" fill="black" />
+    </mask>
+  </defs>
+  <!-- Outer circle with inner cutout & gap -->
+  <circle cx="50" cy="50" r="40.5" fill="#A91D22" mask="url(#fg-mask)" />
+  
+  <!-- Middle crossbar connecting stem to right G edge -->
+  <rect x="40" y="50.5" width="49" height="8" fill="#A91D22" />
+  
+  <!-- Clip-path for inner elements to stay inside the outer circle -->
+  <g clip-path="url(#circle-clip)">
+    <clipPath id="circle-clip">
+      <circle cx="50" cy="50" r="40.5" />
+    </clipPath>
+    <!-- Vertical stem of F -->
+    <rect x="40" y="36.5" width="8" height="54" fill="#A91D22" />
+    <!-- Top arm of F with rounded top-left shoulder -->
+    <path d="M 40 36.5 L 40 35.5 A 7 7 0 0 1 47 28.5 L 67 28.5 L 67 36.5 L 40 36.5 Z" fill="#A91D22" />
+  </g>
+</svg>

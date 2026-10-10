@@ -60,7 +60,27 @@ export function generateLabelsHtml(labels: PieceLabelData[]): string {
       return `
       <div class="label-page">
         <div class="header-row">
-          <div class="shop-title">FAKHRI GLASS</div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 100 100" width="14" height="14" style="vertical-align: middle;">
+              <defs>
+                <mask id="lbl-fg-mask">
+                  <rect width="100" height="100" fill="white" />
+                  <circle cx="50" cy="50" r="32.5" fill="black" />
+                  <rect x="75" y="38" width="30" height="12.5" fill="black" />
+                </mask>
+              </defs>
+              <circle cx="50" cy="50" r="40.5" fill="#000000" mask="url(#lbl-fg-mask)" />
+              <rect x="40" y="50.5" width="49" height="8" fill="#000000" />
+              <g clip-path="url(#lbl-circle-clip)">
+                <clipPath id="lbl-circle-clip">
+                  <circle cx="50" cy="50" r="40.5" />
+                </clipPath>
+                <rect x="40" y="36.5" width="8" height="54" fill="#000000" />
+                <path d="M 40 36.5 L 40 35.5 A 7 7 0 0 1 47 28.5 L 67 28.5 L 67 36.5 L 40 36.5 Z" fill="#000000" />
+              </g>
+            </svg>
+            <span class="shop-title">FAKHRI GLASS</span>
+          </div>
           <div class="store-badge">${escapeHtml(l.storeLabel.toUpperCase())}</div>
         </div>
 

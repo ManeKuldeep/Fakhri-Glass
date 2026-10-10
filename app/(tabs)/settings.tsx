@@ -14,6 +14,7 @@ import { supabase } from '../../src/lib/supabase';
 import { logEvent } from '../../src/lib/logEvent';
 import { useAuthStore } from '../../src/stores/authStore';
 import { exportShopBackup } from '../../src/features/settings/utils/exportBackup';
+import FakhriLogo from '../../src/components/common/FakhriLogo';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -119,6 +120,39 @@ export default function SettingsScreen() {
           </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
         </Pressable>
+      </View>
+
+      {/* ── Business & Workshop Profile ── */}
+      <Text style={styles.sectionHeader}>Business Details</Text>
+      <View style={styles.businessCard}>
+        <View style={styles.businessHeader}>
+          <FakhriLogo variant="horizontal" size={42} />
+        </View>
+        <View style={styles.businessDivider} />
+        <View style={styles.businessRow}>
+          <MaterialCommunityIcons name="map-marker-outline" size={18} color="#A91D22" style={styles.businessIcon} />
+          <Text style={styles.businessText}>
+            Shop No. 6, Plot No. 3, Sector - 24, Turbhe, Navi Mumbai - 400705
+          </Text>
+        </View>
+        <View style={styles.businessRow}>
+          <MaterialCommunityIcons name="phone-outline" size={18} color="#A91D22" style={styles.businessIcon} />
+          <Text style={styles.businessText}>
+            Qutub Khan: 9930930445 · Shakir: 9322527399
+          </Text>
+        </View>
+        <View style={styles.businessRow}>
+          <MaterialCommunityIcons name="email-outline" size={18} color="#A91D22" style={styles.businessIcon} />
+          <Text style={styles.businessText}>qutubkjao@gmail.com</Text>
+        </View>
+        <View style={styles.brandTagsRow}>
+          <View style={styles.brandTag}>
+            <Text style={styles.brandTagText}>MODIGUARD FLOAT GLASS</Text>
+          </View>
+          <View style={styles.brandTag}>
+            <Text style={styles.brandTagText}>SAINT-GOBAIN</Text>
+          </View>
+        </View>
       </View>
 
       {/* ── Logout button ── */}
@@ -244,6 +278,64 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F1F5F9',
     marginLeft: 66,
+  },
+  businessCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  businessHeader: {
+    paddingBottom: 12,
+  },
+  businessDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginBottom: 12,
+  },
+  businessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  businessIcon: {
+    marginRight: 10,
+  },
+  businessText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#334155',
+    lineHeight: 18,
+  },
+  brandTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
+  },
+  brandTag: {
+    backgroundColor: '#FFF1F2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FFE4E6',
+  },
+  brandTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9F1239',
+    letterSpacing: 0.3,
   },
   logoutButton: {
     height: 48,
