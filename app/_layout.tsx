@@ -1,17 +1,16 @@
 import 'react-native-gesture-handler';
 import { useEffect } from 'react';
 import { Slot, useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from '../src/lib/supabase';
+import { queryClient, handleAuthUserChange } from '../src/lib/queryClient';
 import { useAuthStore } from '../src/stores/authStore';
 import type { UserProfile } from '../src/stores/authStore';
 import FakhriLogo from '../src/components/common/FakhriLogo';
-
-const queryClient = new QueryClient();
 
 /** Fetch the logged-in user's profile from the `profiles` table. */
 async function fetchProfile(userId: string, retries = 2): Promise<UserProfile | null> {
@@ -77,6 +76,7 @@ export default function RootLayout() {
     // Listen for auth state changes (including INITIAL_SESSION on app start)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        handleAuthUserChange(session?.user?.id);
         if (session?.user) {
           const profile = await fetchProfile(session.user.id);
           setProfile(profile);

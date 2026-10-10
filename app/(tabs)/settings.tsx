@@ -12,6 +12,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { logEvent } from '../../src/lib/logEvent';
+import { handleAuthUserChange } from '../../src/lib/queryClient';
 import { useAuthStore } from '../../src/stores/authStore';
 import { exportShopBackup } from '../../src/features/settings/utils/exportBackup';
 import FakhriLogo from '../../src/components/common/FakhriLogo';
@@ -46,6 +47,7 @@ export default function SettingsScreen() {
         style: 'destructive',
         onPress: async () => {
           await logEvent('Logout');
+          handleAuthUserChange(null);
           await supabase.auth.signOut();
         },
       },
