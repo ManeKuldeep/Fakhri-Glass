@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from '../src/lib/supabase';
 import { queryClient, handleAuthUserChange } from '../src/lib/queryClient';
+import { cleanupAppTempFiles } from '../src/lib/tempFileManager';
 import { useAuthStore } from '../src/stores/authStore';
 import type { UserProfile } from '../src/stores/authStore';
 import FakhriLogo from '../src/components/common/FakhriLogo';
@@ -82,6 +83,7 @@ export default function RootLayout() {
           setProfile(profile);
         } else {
           setProfile(null);
+          void cleanupAppTempFiles('all');
         }
         setLoading(false);
       },

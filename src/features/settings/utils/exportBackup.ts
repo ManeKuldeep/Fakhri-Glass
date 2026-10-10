@@ -1,6 +1,16 @@
 import { Share } from 'react-native';
+import type * as SharingType from 'expo-sharing';
 import { supabase } from '../../../lib/supabase';
 import { logEvent } from '../../../lib/logEvent';
+import { cleanupAppTempFiles, stageBackupJson } from '../../../lib/tempFileManager';
+
+function getSharingModule(): typeof SharingType | null {
+  try {
+    return require('expo-sharing');
+  } catch {
+    return null;
+  }
+}
 
 export interface BackupExportResult {
   success: boolean;
@@ -13,7 +23,9 @@ export interface BackupExportResult {
  * Upon successful share, logs 'Backup exported' via log_event RPC.
  */
 export async function exportShopBackup(): Promise<BackupExportResult> {
-  // Fetch all core business tables concurrently
+  // Purge any previously exported backup temp files
+  await cleanupAppTempFiles('backup');
+
   const [
     categoriesRes,
     productsRes,
@@ -87,12 +99,28 @@ export async function exportShopBackup(): Promise<BackupExportResult> {
 
   const jsonString = JSON.stringify(payload, null, 2);
 
-  const shareResult = await Share.share({
-    title: `Fakhri_Glass_Backup_${dateStr}.json`,
-    message: jsonString,
-  });
+  const backupUri = await stageBackupJson(jsonString, dateStr);
+  const Sharing = getSharingModule();
+  let shared = false;
 
-  if (shareResult.action === Share.sharedAction) {
+  if (backupUri && Sharing && (await Sharing.isAvailableAsync())) {
+    await Sharing.shareAsync(backupUri, {
+      UTI: 'public.json',
+      mimeType: 'application/json',
+      dialogTitle: `Fakhri_Glass_Backup_${dateStr}.json`,
+    });
+    shared = true;
+  } else {
+    const shareResult = await Share.share({
+      title: `Fakhri_Glass_Backup_${dateStr}.json`,
+      message: jsonString,
+    });
+    if (shareResult.action === Share.sharedAction) {
+      shared = true;
+    }
+  }
+
+  if (shared) {
     await logEvent('Backup exported');
   }
 

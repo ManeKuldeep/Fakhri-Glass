@@ -1,6 +1,7 @@
 import type * as PrintType from 'expo-print';
 import type * as SharingType from 'expo-sharing';
 import { logEvent } from '../../lib/logEvent';
+import { cleanupAppTempFiles, stageLabelPdf } from '../../lib/tempFileManager';
 import { OrderWithItemsForLabels } from './types';
 import { generateLabelsHtml, generatePieceLabelsFromOrder } from './utils';
 
@@ -51,12 +52,17 @@ export async function printOrderLabels(
   const widthPoints = 283.46;
   const heightPoints = 141.73;
 
+  // Purge any previously generated label temp files prior to new generation
+  await cleanupAppTempFiles('label');
+
   if (options?.sharePdf) {
-    const { uri } = await Print.printToFileAsync({
+    const { uri: rawUri } = await Print.printToFileAsync({
       html,
       width: widthPoints,
       height: heightPoints,
     });
+
+    const uri = await stageLabelPdf(rawUri);
 
     if (Sharing && (await Sharing.isAvailableAsync())) {
       await Sharing.shareAsync(uri, {

@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { logEvent } from '../../src/lib/logEvent';
 import { handleAuthUserChange } from '../../src/lib/queryClient';
+import { cleanupAppTempFiles } from '../../src/lib/tempFileManager';
 import { useAuthStore } from '../../src/stores/authStore';
 import { exportShopBackup } from '../../src/features/settings/utils/exportBackup';
 import FakhriLogo from '../../src/components/common/FakhriLogo';
@@ -48,6 +49,7 @@ export default function SettingsScreen() {
         onPress: async () => {
           await logEvent('Logout');
           handleAuthUserChange(null);
+          await cleanupAppTempFiles('all');
           await supabase.auth.signOut();
         },
       },

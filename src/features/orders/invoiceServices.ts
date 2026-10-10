@@ -1,6 +1,7 @@
 import type * as PrintType from 'expo-print';
 import type * as SharingType from 'expo-sharing';
 import { logEvent } from '../../lib/logEvent';
+import { cleanupAppTempFiles, stageInvoicePdf } from '../../lib/tempFileManager';
 import { OrderDetailData } from './queries';
 import { generateInvoiceHtml } from './invoiceUtils';
 
@@ -38,12 +39,17 @@ export async function printOrShareOrderInvoice(
   const widthPoints = 595.28;
   const heightPoints = 841.89;
 
+  // Purge any previously generated invoice temp files prior to new generation
+  await cleanupAppTempFiles('invoice');
+
   if (options?.sharePdf) {
-    const { uri } = await Print.printToFileAsync({
+    const { uri: rawUri } = await Print.printToFileAsync({
       html,
       width: widthPoints,
       height: heightPoints,
     });
+
+    const uri = await stageInvoicePdf(rawUri);
 
     if (Sharing && (await Sharing.isAvailableAsync())) {
       await Sharing.shareAsync(uri, {
